@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d12"><title>管理后台</title>
+  <link rel="icon" href="/assets/favicon.svg"><link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body class="admin-page">
+  <div id="loginView" class="login-view">
+    <div class="login-card glass">
+      <a class="brand" href="/"><span class="brand-mark">S</span><span><b>ShortLink Nav</b><small>Admin Console</small></span></a>
+      <div class="eyebrow">SECURE ACCESS</div><h1>欢迎回来</h1><p>输入管理员密码进入控制台。</p>
+      <form id="loginForm"><label>管理员密码<input id="password" type="password" autocomplete="current-password" required></label><button class="btn primary wide">登录后台</button></form>
+      <div id="loginError" class="form-error"></div>
+    </div>
+  </div>
+  <div id="adminView" class="admin-layout hidden">
+    <aside class="sidebar">
+      <a class="brand side-brand" href="/"><span class="brand-mark">S</span><span><b>ShortLink Nav</b><small>Admin Console</small></span></a>
+      <nav>
+        <button class="side-item active" data-section="overview">⌂ <span>概览</span></button>
+        <button class="side-item" data-section="links">↗ <span>短链接</span></button>
+        <button class="side-item" data-section="navigation">▦ <span>导航管理</span></button>
+        <button class="side-item" data-section="settings">⚙ <span>系统设置</span></button>
+      </nav>
+      <div class="sidebar-bottom"><a href="/" target="_blank">打开前台 ↗</a><button id="logoutBtn">退出登录</button></div>
+    </aside>
+    <main class="admin-main">
+      <header class="admin-header"><div><span class="eyebrow" id="sectionEyebrow">OVERVIEW</span><h1 id="sectionTitle">控制台</h1></div><div class="admin-header-actions"><a class="mobile-home-btn" href="/" aria-label="打开前台">首页</a><button class="icon-btn" id="adminThemeBtn">☾</button></div></header>
+      <section id="section-overview" class="admin-section">
+        <div class="stats-grid" id="statsGrid"></div>
+        <div class="dashboard-grid">
+          <div class="panel"><div class="panel-head"><div><h3>点击趋势</h3><small>最近 14 天</small></div></div><div class="chart-wrap"><canvas id="clickChart"></canvas></div></div>
+          <div class="panel"><div class="panel-head"><div><h3>热门短链接</h3><small>按点击量排序</small></div></div><div id="topLinks" class="mini-list"></div></div>
+        </div>
+      </section>
+      <section id="section-links" class="admin-section hidden">
+        <div class="section-bar"><div><h2>短链接</h2><p>创建、管理和分析你的短链接。</p></div><div class="bar-actions"><button class="btn secondary" id="exportLinks">导出 CSV</button><button class="btn primary" id="addLinkBtn">+ 新建短链接</button></div></div>
+        <div class="panel table-panel"><div class="table-tools"><input id="linkSearch" placeholder="搜索短链接…"><button class="btn secondary" id="importLinksBtn">批量导入 CSV</button><input id="csvFile" type="file" accept=".csv,text/csv" class="hidden"></div><div class="table-scroll"><table><thead><tr><th>短码</th><th>目标</th><th>分类</th><th>点击</th><th>状态</th><th></th></tr></thead><tbody id="linksTable"></tbody></table></div></div>
+      </section>
+      <section id="section-navigation" class="admin-section hidden">
+        <div class="section-bar"><div><h2>导航管理</h2><p>拖拽卡片即可调整前台顺序；关联短链接会自动同步。</p></div><div class="bar-actions"><button class="btn secondary" id="saveNavOrder">保存排序</button><button class="btn primary" id="addNavBtn">+ 添加导航</button></div></div>
+        <div id="navAdminGrid" class="admin-nav-grid"></div>
+      </section>
+      <section id="section-settings" class="admin-section hidden">
+        <div class="section-bar"><div><h2>系统设置</h2><p>统一管理前台标题、描述、视觉强调色和导航排版。</p></div></div>
+        <form id="settingsForm" class="panel settings-form">
+          <div class="settings-group"><div><strong>网站基础</strong><small>前台首页的标题和说明。</small></div>
+            <label>网站标题<input name="site_title"></label>
+            <label>副标题<input name="site_subtitle"></label>
+            <label>首页标题<input name="hero_title" placeholder="Everything you need, one click away."></label>
+            <label>首页描述<input name="hero_description" placeholder="A fast, elegant home for your frequently used websites."></label>
+            <label>SEO/站点描述<input name="site_description" placeholder="用于站点描述"></label>
+            <label>强调色<input name="accent" type="color"></label>
+          </div>
+          <div class="settings-group"><div><strong>导航标签排版</strong><small>控制分类标签样式、分类顺序和隐藏分类。</small></div>
+            <label>标签样式<select name="nav_tag_style"><option value="pills">胶囊标签</option><option value="tabs">选项卡</option><option value="sections">分类标题</option></select></label>
+            <label>标签顺序<input name="nav_category_order" placeholder="例如：常用,AI,工具,娱乐"></label>
+            <label>隐藏标签<input name="nav_hidden_categories" placeholder="例如：其他,测试（多个用逗号分隔）"></label>
+          </div>
+          <div class="settings-group"><div><strong>每行显示数量</strong><small>手机、平板、电脑、大屏可以分别设置。</small></div>
+            <div class="two settings-two">
+              <label>手机<input name="nav_columns_mobile" type="number" min="1" max="6"></label>
+              <label>平板<input name="nav_columns_tablet" type="number" min="1" max="6"></label>
+              <label>电脑<input name="nav_columns_desktop" type="number" min="1" max="6"></label>
+              <label>大屏<input name="nav_columns_wide" type="number" min="1" max="6"></label>
+            </div>
+          </div>
+          <button class="btn primary">保存设置</button><div id="settingsMessage" class="form-success"></div>
+        </form>
+      </section>
+    </main>
+  </div>
+  <div id="modal" class="modal hidden"><div class="modal-backdrop" data-close-modal></div><div class="modal-card"><div class="modal-head"><h3 id="modalTitle"></h3><button class="icon-btn" data-close-modal>×</button></div><div id="modalBody"></div></div></div>
+  <div id="toastRoot" class="toast-root"></div>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="/assets/admin.js"></script>
+</body>
+</html>

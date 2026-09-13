@@ -1,0 +1,7 @@
+*.bak
+*.bak2
+*.bak3
+node_modules/
+.wrangler/
+.dev.vars
+.DS_Store

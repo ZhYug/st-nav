@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d12">
+  <meta name="description" content="Personal navigation & short links">
+  <title>My Navigation</title>
+  <link rel="icon" href="/assets/favicon.svg">
+  <link rel="preload" href="/assets/styles.css" as="style">
+  <link rel="stylesheet" href="/assets/styles.css">
+<style>
+html,body{background:#090b10;color:#f5f7fb}
+body{min-height:100vh}
+.nav-grid{min-height:180px}
+@media(max-width:600px){.shell{width:calc(100% - 28px)}.hero{padding-top:48px}.hero h1{font-size:clamp(34px,10vw,52px)}}
+</style></head>
+<body class="public-page">
+  <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+  <header class="topbar shell">
+    <a class="brand" href="/">
+      <span class="brand-mark">S</span>
+      <span><b id="siteTitle">My Navigation</b><small id="siteSubtitle">Personal links</small></span>
+    </a>
+    <div class="top-actions">
+      <button class="icon-btn" id="themeBtn" title="切换主题">☾</button>
+      <a class="admin-link" href="/admin">管理</a>
+    </div>
+  </header>
+
+  <main class="shell public-main">
+    <section class="hero">
+      <div class="eyebrow">PERSONAL DASHBOARD</div>
+      <h1 id="heroTitle">Everything you need, one click away.</h1>
+      <p id="heroDesc">A fast, elegant home for your frequently used websites.</p>
+      <div class="search-wrap">
+        <span>⌕</span><input id="searchInput" autocomplete="off" placeholder="搜索导航、描述或分类…">
+        <kbd>⌘ K</kbd>
+      </div>
+    </section>
+
+    <section class="toolbar">
+      <div class="chips" id="categoryChips"></div>
+      <button class="text-btn" id="favoritesOnly">☆ 收藏</button>
+    </section>
+
+    <section id="navGrid" class="nav-grid" aria-live="polite"></section>
+    <div id="emptyState" class="empty-state hidden">
+      <div class="empty-icon">⌕</div>
+      <h3>没有找到匹配内容</h3>
+      <p>换个关键词试试，或者清除筛选。</p>
+      <button class="btn secondary" id="clearFilters">清除筛选</button>
+    </div>
+
+    <section class="recent-section">
+      <div class="section-heading"><div><span class="eyebrow">QUICK ACCESS</span><h2>最近访问</h2></div><button class="text-btn" id="clearRecent">清除</button></div>
+      <div id="recentGrid" class="recent-grid"></div>
+    </section>
+  </main>
+
+  <footer class="shell footer">
+    <span id="footerText">Personal navigation & short links</span>
+    <span>⌘K 快速搜索</span>
+  </footer>
+
+  <script src="/assets/app.js" defer></script>
+</body>
+</html>

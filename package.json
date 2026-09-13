@@ -1,0 +1,22 @@
+{
+  "name": "shortlink-nav",
+  "private": true,
+  "version": "1.0.0",
+  "description": "ShortLink Nav — Cloudflare Workers + D1 one-click deployment",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "update": "wrangler deploy",
+    "doctor": "node scripts/doctor.mjs"
+  },
+  "cloudflare": {
+    "bindings": {
+      "ADMIN_PASSWORD": {
+        "description": "管理员登录密码。请设置至少 10 位的强密码。该值会作为加密会话签名密钥使用。"
+      }
+    }
+  },
+  "devDependencies": {
+    "wrangler": "latest"
+  }
+}
