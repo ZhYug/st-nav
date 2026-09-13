@@ -282,6 +282,43 @@ $("#clearRecent").onclick = () => {
   renderRecent();
 };
 
+function setMobileNav(action) {
+  document.querySelectorAll(".mobile-nav-item").forEach((item) => {
+    item.classList.toggle("active", item.dataset.mobileAction === action);
+  });
+}
+
+function initMobileAppUI() {
+  const nav = $("#mobileBottomNav");
+  if (!nav) return;
+  nav.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-mobile-action]");
+    if (!item) return;
+    const action = item.dataset.mobileAction;
+    if (action === "admin") return;
+    event.preventDefault();
+    if (action === "home") {
+      state.category = "全部";
+      state.favoritesOnly = false;
+      $("#searchInput").value = "";
+      $("#favoritesOnly").textContent = "☆ 收藏";
+      renderCats();
+      render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setMobileNav("home");
+    } else if (action === "favorites") {
+      state.favoritesOnly = true;
+      $("#favoritesOnly").textContent = "★ 已收藏";
+      render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setMobileNav("favorites");
+    } else if (action === "recent") {
+      $(".recent-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setMobileNav("recent");
+    }
+  });
+}
+
 function applyTheme() {
   const saved = localStorage.getItem("sln_theme");
   if (saved === "light") document.documentElement.setAttribute("data-theme", "light");
@@ -308,4 +345,10 @@ document.addEventListener("keydown", (event) => {
 });
 
 applyTheme();
+initMobileAppUI();
+
+// Keep keyboard shortcut behavior, but make the public page feel like an installed app on mobile.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}
 init();
