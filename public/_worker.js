@@ -1,143 +1,44 @@
 
-const VERSION = "1.0.3";
+const VERSION = "1.0.4";
 const SESSION_COOKIE = "__Host-stnav_session";
 const SESSION_TTL = 86400;
 const PUBLIC_CACHE_CONTROL = "public, max-age=0, s-maxage=30, stale-while-revalidate=60";
-const SCHEMA_SQL = `
-PRAGMA foreign_keys = ON;
-CREATE TABLE IF NOT EXISTS links (
-  id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE COLLATE BINARY, url TEXT NOT NULL,
-  title TEXT, description TEXT, category TEXT, enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
-  clicks INTEGER NOT NULL DEFAULT 0 CHECK (clicks >= 0), last_clicked_at TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_links_enabled ON links(enabled);
-CREATE INDEX IF NOT EXISTS idx_links_clicks ON links(clicks DESC);
-CREATE INDEX IF NOT EXISTS idx_links_created_at ON links(created_at DESC, id DESC);
-CREATE TABLE IF NOT EXISTS link_daily_stats (
-  link_id INTEGER NOT NULL, day TEXT NOT NULL, clicks INTEGER NOT NULL DEFAULT 0 CHECK (clicks >= 0),
-  PRIMARY KEY (link_id, day), FOREIGN KEY (link_id) REFERENCES links(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_link_daily_stats_day ON link_daily_stats(day);
-CREATE TABLE IF NOT EXISTS navigation (
-  id INTEGER PRIMARY KEY, title TEXT NOT NULL, description TEXT, url TEXT NOT NULL, icon TEXT, category TEXT,
-  sort_order INTEGER NOT NULL DEFAULT 0, enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)), link_id INTEGER,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (link_id) REFERENCES links(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_navigation_enabled_order ON navigation(enabled, sort_order, id);
-CREATE INDEX IF NOT EXISTS idx_navigation_link_id ON navigation(link_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_navigation_link_unique ON navigation(link_id) WHERE link_id IS NOT NULL;
-CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-INSERT OR IGNORE INTO settings(key,value) VALUES
- ('site_title','My Navigation'),('site_subtitle','Personal navigation & short links'),
- ('site_description','Everything you need, one click away.'),('hero_title','Everything you need, one click away.'),
- ('hero_description','A fast, elegant home for your frequently used websites.'),('accent','#8b6cff'),
- ('nav_tag_style','pills'),('nav_columns_mobile','2'),('nav_columns_tablet','3'),
- ('nav_columns_desktop','4'),('nav_columns_wide','6'),('nav_category_order',''),('nav_hidden_categories','');
-INSERT INTO navigation(title,description,url,icon,category,sort_order,enabled)
-SELECT 'GitHub','代码仓库与开源项目','https://github.com','','开发',0,1 WHERE NOT EXISTS (SELECT 1 FROM navigation);
-INSERT INTO navigation(title,description,url,icon,category,sort_order,enabled)
-SELECT 'Google','搜索与常用服务','https://www.google.com','','工具',1,1 WHERE (SELECT COUNT(*) FROM navigation)=1;
-INSERT INTO navigation(title,description,url,icon,category,sort_order,enabled)
-SELECT 'Cloudflare','网络与边缘服务','https://dash.cloudflare.com','','开发',2,1 WHERE (SELECT COUNT(*) FROM navigation)=2;
-INSERT INTO navigation(title,description,url,icon,category,sort_order,enabled)
-SELECT 'ChatGPT','AI 助手','https://chatgpt.com','','AI',3,1 WHERE (SELECT COUNT(*) FROM navigation)=3;
-PRAGMA user_version = 1;
-`;
-
 const databaseReady = new WeakMap();
 
 async function ensureDatabase(env) {
-  if (!env.DB) throw new Error("D1 数据库绑定 DB 不存在，请检查 Cloudflare 部署配置。");
+  if (!env.DB) {
+    throw new Error("D1 数据库绑定 DB 不存在，请检查 Cloudflare 部署配置。");
+  }
+
   let promise = databaseReady.get(env);
   if (!promise) {
     promise = (async () => {
-      const row = await env.DB.prepare("PRAGMA user_version").first();
-      if (Number(row?.user_version) >= 1) return;
-      await env.DB.exec(SCHEMA_SQL);
+      const requiredTables = ["links", "link_daily_stats", "navigation", "settings"];
+      const result = await env.DB
+        .prepare(`
+          SELECT name
+          FROM sqlite_master
+          WHERE type = 'table'
+            AND name IN (?, ?, ?, ?)
+        `)
+        .bind(...requiredTables)
+        .all();
+
+      const existing = new Set((result.results ?? []).map((row) => row.name));
+      const missing = requiredTables.filter((name) => !existing.has(name));
+
+      if (missing.length) {
+        throw new Error(
+          `D1 数据库尚未初始化，缺少数据表: ${missing.join(", ")}`
+        );
+      }
     })();
+
     databaseReady.set(env, promise);
     promise.catch(() => databaseReady.delete(env));
   }
+
   await promise;
-}
-const JSON_HEADERS = {
-  "content-type": "application/json;charset=UTF-8",
-  "cache-control": "no-store",
-  "x-content-type-options": "nosniff",
-  "referrer-policy": "strict-origin-when-cross-origin",
-  "permissions-policy": "camera=(), microphone=(), geolocation=()",
-};
-
-const SECURITY_HEADERS = {
-  "x-content-type-options": "nosniff",
-  "referrer-policy": "strict-origin-when-cross-origin",
-  "permissions-policy": "camera=(), microphone=(), geolocation=()",
-  "x-frame-options": "DENY",
-};
-
-const json = (data, status = 200, headers = {}) =>
-  new Response(JSON.stringify(data), {
-    status,
-    headers: { ...JSON_HEADERS, ...SECURITY_HEADERS, ...headers },
-  });
-
-const now = () => new Date().toISOString();
-const b62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const CODE_RE = /^[A-Za-z0-9_-]{2,64}$/;
-const RESERVED_CODES = new Set(["admin", "api"]);
-const ALLOWED_SETTINGS = [
-  "site_title",
-  "site_subtitle",
-  "site_description",
-  "hero_title",
-  "hero_description",
-  "accent",
-  "nav_tag_style",
-  "nav_columns_mobile",
-  "nav_columns_tablet",
-  "nav_columns_desktop",
-  "nav_columns_wide",
-  "nav_category_order",
-  "nav_hidden_categories",
-];
-
-function randomCode(n = 7) {
-  let s = "";
-  const values = new Uint32Array(n);
-  crypto.getRandomValues(values);
-  for (let i = 0; i < n; i++) s += b62[values[i] % b62.length];
-  return s;
-}
-
-function validUrl(value) {
-  try {
-    const u = new URL(String(value));
-    return u.protocol === "http:" || u.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function clean(value, max = 2000) {
-  return String(value ?? "").trim().slice(0, max);
-}
-
-function base64urlEncode(value) {
-  return btoa(value)
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replaceAll("=", "");
-}
-
-function base64urlDecode(value) {
-  const padded = value.replaceAll("-", "+").replaceAll("_", "/") + "===".slice((value.length + 3) % 4);
-  return atob(padded);
-}
-
-function cookie(name, value, maxAge = SESSION_TTL) {
-  return `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Strict`;
 }
 
 async function hmac(secret, data) {
