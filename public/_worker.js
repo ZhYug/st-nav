@@ -1,5 +1,5 @@
 
-const VERSION = "1.0.4";
+const VERSION = "1.0.5";
 const SESSION_COOKIE = "__Host-stnav_session";
 const SESSION_TTL = 86400;
 const PUBLIC_CACHE_CONTROL = "public, max-age=0, s-maxage=30, stale-while-revalidate=60";
@@ -39,6 +39,84 @@ async function ensureDatabase(env) {
   }
 
   await promise;
+}
+
+const JSON_HEADERS = {
+  "content-type": "application/json;charset=UTF-8",
+  "cache-control": "no-store",
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+};
+
+const SECURITY_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  "x-frame-options": "DENY",
+};
+
+const json = (data, status = 200, headers = {}) =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: { ...JSON_HEADERS, ...SECURITY_HEADERS, ...headers },
+  });
+
+const now = () => new Date().toISOString();
+const b62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const CODE_RE = /^[A-Za-z0-9_-]{2,64}$/;
+const RESERVED_CODES = new Set(["admin", "api"]);
+const ALLOWED_SETTINGS = [
+  "site_title",
+  "site_subtitle",
+  "site_description",
+  "hero_title",
+  "hero_description",
+  "accent",
+  "nav_tag_style",
+  "nav_columns_mobile",
+  "nav_columns_tablet",
+  "nav_columns_desktop",
+  "nav_columns_wide",
+  "nav_category_order",
+  "nav_hidden_categories",
+];
+
+function randomCode(n = 7) {
+  let s = "";
+  const values = new Uint32Array(n);
+  crypto.getRandomValues(values);
+  for (let i = 0; i < n; i++) s += b62[values[i] % b62.length];
+  return s;
+}
+
+function validUrl(value) {
+  try {
+    const u = new URL(String(value));
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function clean(value, max = 2000) {
+  return String(value ?? "").trim().slice(0, max);
+}
+
+function base64urlEncode(value) {
+  return btoa(value)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+}
+
+function base64urlDecode(value) {
+  const padded = value.replaceAll("-", "+").replaceAll("_", "/") + "===".slice((value.length + 3) % 4);
+  return atob(padded);
+}
+
+function cookie(name, value, maxAge = SESSION_TTL) {
+  return `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Strict`;
 }
 
 async function hmac(secret, data) {
