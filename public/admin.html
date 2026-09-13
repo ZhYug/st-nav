@@ -39,7 +39,13 @@
         <div class="panel table-panel"><div class="table-tools"><input id="linkSearch" placeholder="搜索短链接…"><button class="btn secondary" id="importLinksBtn">批量导入 CSV</button><input id="csvFile" type="file" accept=".csv,text/csv" class="hidden"></div><div class="table-scroll"><table><thead><tr><th>短码</th><th>目标</th><th>分类</th><th>点击</th><th>状态</th><th></th></tr></thead><tbody id="linksTable"></tbody></table></div></div>
       </section>
       <section id="section-navigation" class="admin-section hidden">
-        <div class="section-bar"><div><h2>导航管理</h2><p>拖拽卡片即可调整前台顺序；关联短链接会自动同步。</p></div><div class="bar-actions"><button class="btn secondary" id="saveNavOrder">保存排序</button><button class="btn primary" id="addNavBtn">+ 添加导航</button></div></div>
+        <div class="section-bar"><div><h2>导航管理</h2><p>拖拽调整顺序；关联短链接会自动同步。<span id="navCount" class="section-count">0 项</span></p></div><div class="bar-actions"><button class="btn secondary" id="saveNavOrder">保存排序</button><button class="btn primary" id="addNavBtn">+ 添加导航</button></div></div>
+        <div class="nav-admin-toolbar panel">
+          <div class="nav-admin-search"><span>⌕</span><input id="navSearch" type="search" placeholder="搜索标题、URL、分类…" autocomplete="off"></div>
+          <select id="navCategoryFilter" aria-label="筛选分类"><option value="">全部分类</option></select>
+          <button class="text-btn" id="clearNavFilter" type="button">清除</button>
+        </div>
+        <div id="navFilterHint" class="nav-filter-hint hidden">筛选状态下暂不支持拖拽排序，请清除筛选后调整顺序。</div>
         <div id="navAdminGrid" class="admin-nav-grid"></div>
       </section>
       <section id="section-settings" class="admin-section hidden">

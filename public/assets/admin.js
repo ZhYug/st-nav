@@ -336,9 +336,32 @@ function fallbackIcon(item) {
 
 function navIcon(item) { return item.icon || iconUrl(item.url); }
 
+function navFilteredItems() {
+  const query = String($("#navSearch")?.value || "").trim().toLowerCase();
+  const category = String($("#navCategoryFilter")?.value || "");
+  return A.nav.filter((item) => {
+    const haystack = [item.title, item.url, item.description, item.category].join(" ").toLowerCase();
+    return (!query || haystack.includes(query)) && (!category || (item.category || "未分类") === category);
+  });
+}
+
+function refreshNavFilters() {
+  const select = $("#navCategoryFilter");
+  if (!select) return;
+  const current = select.value;
+  const categories = [...new Set(A.nav.map((item) => item.category || "未分类"))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  select.innerHTML = '<option value="">全部分类</option>' + categories.map((category) => `<option value="${esc(category)}">${esc(category)}</option>`).join("");
+  select.value = categories.includes(current) ? current : "";
+}
+
 function renderNav() {
+  refreshNavFilters();
   const element = $("#navAdminGrid");
-  element.innerHTML = A.nav.map((item) => `
+  const items = navFilteredItems();
+  const filtered = items.length !== A.nav.length;
+  $("#navCount").textContent = filtered ? `${items.length} / ${A.nav.length} 项` : `${A.nav.length} 项`;
+  $("#navFilterHint").classList.toggle("hidden", !filtered);
+  element.innerHTML = items.map((item) => `
     <div class="admin-nav-card" draggable="true" data-id="${item.id}">
       <div class="admin-nav-head">
         <div class="admin-icon-wrap">
@@ -348,8 +371,12 @@ function renderNav() {
         <span class="drag-handle">⠿</span>
       </div>
       <p>${esc(item.description || item.url)}</p>
-      <div class="nav-admin-badges">
-        ${item.link_id ? '<span class="linked-badge">短链接关联</span>' : '<span class="manual-badge">手动导航</span>'}
+      <div class="nav-admin-meta">
+        <div class="nav-admin-badges">
+          ${item.link_id ? '<span class="linked-badge">短链接</span>' : '<span class="manual-badge">手动</span>'}
+          <span class="nav-order-badge">#${Number(item.sort_order ?? 0) + 1}</span>
+        </div>
+        <span class="nav-url" title="${esc(item.url)}">${esc(item.url)}</span>
       </div>
       <div class="row-actions nav-admin-actions">
         <button class="small-btn nav-move-btn" data-navact="up" data-id="${item.id}" aria-label="上移" title="上移">↑</button>
@@ -365,8 +392,12 @@ function renderNav() {
 
 function bindDrag() {
   let dragging = null;
+  const isFiltered = !!($("#navSearch")?.value || $("#navCategoryFilter")?.value);
   document.querySelectorAll(".admin-nav-card").forEach((card) => {
-    card.ondragstart = () => { dragging = card; card.classList.add("dragging"); };
+    card.ondragstart = (event) => {
+      if (isFiltered) { event.preventDefault(); return; }
+      dragging = card; card.classList.add("dragging");
+    };
     card.ondragend = () => { card.classList.remove("dragging"); dragging = null; };
     card.ondragover = (event) => {
       event.preventDefault();
@@ -414,6 +445,14 @@ $("#navAdminGrid").onclick = async (event) => {
       toast("顺序已调整，点击“保存排序”后生效");
     }
   }
+};
+
+$("#navSearch").oninput = renderNav;
+$("#navCategoryFilter").onchange = renderNav;
+$("#clearNavFilter").onclick = () => {
+  $("#navSearch").value = "";
+  $("#navCategoryFilter").value = "";
+  renderNav();
 };
 
 $("#saveNavOrder").onclick = async () => {
