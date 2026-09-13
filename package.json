@@ -1,8 +1,8 @@
 {
-  "name": "shortlink-nav",
+  "name": "st-nav",
   "private": true,
-  "version": "1.0.0",
-  "description": "ShortLink Nav — Cloudflare Workers + D1 one-click deployment",
+  "version": "1.0.2",
+  "description": "ST Nav — Cloudflare Workers + D1 one-click deployment",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",

@@ -1,5 +1,4 @@
-$schema = "./node_modules/wrangler/config-schema.json"
-name = "shortlink-nav"
+name = "st-nav"
 main = "./public/_worker.js"
 compatibility_date = "2026-09-11"
 
@@ -9,5 +8,4 @@ binding = "ASSETS"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "shortlink-nav"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_name = "st-nav"

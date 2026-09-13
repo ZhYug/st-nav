@@ -5,7 +5,7 @@ import { readFileSync, existsSync } from 'node:fs';
 const WRANGLER = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const run = (args) => spawnSync(WRANGLER, ['--yes', 'wrangler@latest', ...args], { stdio: 'inherit' }).status === 0;
 
-console.log('🔎 Shortlink Nav v4.2 环境检查\n');
+console.log('🔎 ST Nav v1.0.2 环境检查\n');
 
 if (!existsSync('wrangler.toml')) {
   console.error('✗ 缺少 wrangler.toml');
@@ -20,10 +20,10 @@ if (!/binding\s*=\s*"DB"/.test(config) || !/database_name\s*=/.test(config)) {
   console.error('✗ 缺少 D1 DB binding');
   process.exit(1);
 }
-if (!/database_id\s*=\s*"00000000-0000-0000-0000-000000000000"/.test(config)) {
-  console.log('✓ D1 已经绑定到具体数据库（本地已有部署配置）');
+if (/database_id\s*=/.test(config)) {
+  console.log('✓ D1 已经包含数据库 ID');
 } else {
-  console.log('✓ D1 自动配置模板存在（Deploy to Cloudflare 会自动创建）');
+  console.log('✓ D1 自动配置模板存在（Deploy to Cloudflare / Wrangler 会自动创建并绑定）');
 }
 if (!existsSync('.dev.vars.example')) {
   console.error('✗ 缺少 .dev.vars.example');

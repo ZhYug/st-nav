@@ -1,8 +1,8 @@
-# ShortLink Nav
+# ST Nav
 
 一个基于 **Cloudflare Workers + D1 + Workers Static Assets** 的轻量级个人导航与短链接服务。
 
-> **当前版本：1.0.0**
+> **当前版本：1.0.2**
 >
 > 目标是：**一次部署、自动初始化数据库、以后只更新代码，不做数据库迁移。**
 
@@ -34,7 +34,7 @@
 
 直接点击本页顶部的 **Deploy to Cloudflare**。
 
-Cloudflare 会读取仓库中的 `wrangler.toml`，创建 Worker，并根据绑定配置处理 D1 资源。
+Cloudflare 会读取仓库中的 `wrangler.toml`，创建名为 `st-nav` 的 Worker，并自动创建并绑定一个名为 `st-nav` 的独立 D1 数据库。项目不会连接或修改你账号中其他同名旧项目的数据库。
 
 > 源仓库需要是公开的 GitHub/GitLab 仓库；部署后的 Cloudflare 资源属于部署者自己的账号。
 
@@ -191,7 +191,7 @@ npm run doctor
 正常情况下返回类似：
 
 ```json
-{"ok":true,"version":"1.0.0","database":true}
+{"ok":true,"version":"1.0.2","database":true}
 ```
 
 ---
@@ -359,6 +359,17 @@ npm run doctor
 ---
 
 # 📝 Changelog
+
+## 1.0.2
+
+### 部署与资源隔离
+
+- 项目正式命名为 **ST Nav**。
+- Worker 名称使用 `st-nav`。
+- 一键部署自动创建并绑定独立的 D1 数据库 `st-nav`。
+- 不写入任何旧项目的 `database_id`，避免与已有 `shortlink-nav` 数据库冲突。
+- 修正 Wrangler 配置，移除会导致 Cloudflare Deploy 页面解析失败的非法 TOML `$schema` 行。
+- 使用 Cloudflare 官方支持的自动资源 provisioning：D1 配置不预先写入账号专属数据库 ID。
 
 ## 1.0.0
 

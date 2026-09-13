@@ -1,4 +1,4 @@
--- Shortlink Nav v4 - clean database schema
+-- ST Nav v1.0.2 - clean database schema
 -- Stable v4 schema. Idempotent: safe to execute repeatedly.
 -- The Worker embeds this schema and initializes missing objects automatically.
 
