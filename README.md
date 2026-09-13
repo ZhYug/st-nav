@@ -11,7 +11,7 @@
 将下面的 `YOUR_GITHUB_OWNER/shortlink-nav` 替换成你的公开 GitHub 仓库地址：
 
 ```md
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/YOUR_GITHUB_OWNER/shortlink-nav)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/ZhYug/st-nav)
 ```
 
 用户点击按钮后，Cloudflare 会：
