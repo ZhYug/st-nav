@@ -3,6 +3,7 @@ const VERSION = "1.0.5";
 const SESSION_COOKIE = "__Host-stnav_session";
 const SESSION_TTL = 86400;
 const PUBLIC_CACHE_CONTROL = "public, max-age=0, s-maxage=30, stale-while-revalidate=60";
+const REDIRECT_CACHE_CONTROL = PUBLIC_CACHE_CONTROL;
 const databaseReady = new WeakMap();
 
 async function ensureDatabase(env) {
@@ -84,9 +85,16 @@ const ALLOWED_SETTINGS = [
 
 function randomCode(n = 7) {
   let s = "";
+  const size = b62.length;
+  const limit = Math.floor(0x100000000 / size) * size;
   const values = new Uint32Array(n);
-  crypto.getRandomValues(values);
-  for (let i = 0; i < n; i++) s += b62[values[i] % b62.length];
+  while (s.length < n) {
+    crypto.getRandomValues(values);
+    for (let i = 0; i < values.length && s.length < n; i++) {
+      if (values[i] >= limit) continue;
+      s += b62[values[i] % size];
+    }
+  }
   return s;
 }
 
@@ -254,15 +262,24 @@ function redirectCacheAvailable() {
   return typeof caches !== "undefined" && !!caches.default;
 }
 
+function waitUntil(ctx, promise) {
+  if (!promise) return;
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(Promise.resolve(promise).catch((error) => console.error(error)));
+  } else if (promise?.catch) {
+    promise.catch((error) => console.error(error));
+  }
+}
+
 function invalidateRedirectCache(request, ctx, code) {
-  if (!code || !ctx?.waitUntil || !redirectCacheAvailable()) return;
-  ctx.waitUntil(caches.default.delete(redirectCacheKey(request, code)));
+  if (!code || !redirectCacheAvailable()) return;
+  waitUntil(ctx, caches.default.delete(redirectCacheKey(request, code)));
 }
 
 async function invalidatePublicCache(request, ctx) {
-  if (!ctx?.waitUntil || typeof caches === "undefined" || !caches.default) return;
+  if (typeof caches === "undefined" || !caches.default) return;
   const key = publicCacheKey(request);
-  ctx.waitUntil(caches.default.delete(key));
+  waitUntil(ctx, caches.default.delete(key));
 }
 
 async function getPublicBootstrap(env) {
@@ -274,6 +291,7 @@ async function getPublicBootstrap(env) {
        FROM navigation
        LEFT JOIN links ON navigation.link_id = links.id
        WHERE navigation.enabled=1
+         AND (navigation.link_id IS NULL OR links.enabled=1)
        ORDER BY navigation.sort_order,navigation.id`
     ),
     env.DB.prepare("SELECT key,value FROM settings"),
@@ -881,7 +899,7 @@ async function handleRedirect(request, env, ctx, code) {
 
     if (redirectCacheAvailable()) {
       try {
-        const response = json(link, 200, { "cache-control": "public, max-age=0, s-maxage=30, stale-while-revalidate=60" });
+        const response = json(link, 200, { "cache-control": REDIRECT_CACHE_CONTROL });
         const put = caches.default.put(redirectCacheKey(request, code), response);
         if (ctx?.waitUntil) ctx.waitUntil(put);
       } catch (error) {
@@ -892,13 +910,11 @@ async function handleRedirect(request, env, ctx, code) {
 
   const timestamp = now();
   const day = timestamp.slice(0, 10);
-  ctx.waitUntil(
-    env.DB.batch([
-      env.DB.prepare("UPDATE links SET clicks=clicks+1,last_clicked_at=? WHERE id=?").bind(timestamp, link.id),
-      env.DB.prepare(`INSERT INTO link_daily_stats(link_id,day,clicks) VALUES(?,?,1)
-        ON CONFLICT(link_id,day) DO UPDATE SET clicks=link_daily_stats.clicks+1`).bind(link.id, day),
-    ]).catch((error) => console.error("Click analytics write failed", error))
-  );
+  waitUntil(ctx, env.DB.batch([
+    env.DB.prepare("UPDATE links SET clicks=clicks+1,last_clicked_at=? WHERE id=?").bind(timestamp, link.id),
+    env.DB.prepare(`INSERT INTO link_daily_stats(link_id,day,clicks) VALUES(?,?,1)
+      ON CONFLICT(link_id,day) DO UPDATE SET clicks=link_daily_stats.clicks+1`).bind(link.id, day),
+  ]).catch((error) => console.error("Click analytics write failed", error)));
   return Response.redirect(link.url, 302);
 }
 
@@ -911,40 +927,27 @@ export default {
       if (parts[0] === "api") return await handleApi(request, env, ctx, parts);
 
       // 显式将 /admin 映射到管理后台页面，这里显式映射到 admin.html。
-      if (
-  url.pathname === "/admin" ||
-  url.pathname === "/admin/"
-) {
-  const adminUrl = new URL("/admin.html", url);
-  const adminRequest = new Request(adminUrl.toString(), {
-    method: "GET",
-    headers: request.headers,
-  });
+      if (url.pathname === "/admin" || url.pathname === "/admin/") {
+        const adminUrl = new URL("/admin.html", url);
+        const adminRequest = new Request(adminUrl.toString(), {
+          method: "GET",
+          headers: request.headers,
+        });
+        const adminResponse = await env.ASSETS.fetch(adminRequest);
+        const adminHeaders = new Headers(adminResponse.headers);
+        Object.entries(SECURITY_HEADERS).forEach(([key, value]) => adminHeaders.set(key, value));
+        adminHeaders.set("cache-control", "no-store");
+        return new Response(adminResponse.body, {
+          status: adminResponse.status,
+          statusText: adminResponse.statusText,
+          headers: adminHeaders,
+        });
+      }
 
-  const adminResponse = await env.ASSETS.fetch(adminRequest);
-  const adminHeaders = new Headers(adminResponse.headers);
-  adminHeaders.set("x-content-type-options", "nosniff");
-  adminHeaders.set("referrer-policy", "strict-origin-when-cross-origin");
-  adminHeaders.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
-  adminHeaders.set("x-frame-options", "DENY");
-  return new Response(adminResponse.body, { status: adminResponse.status, statusText: adminResponse.statusText, headers: adminHeaders });
-}
-
-      if (
-  parts.length === 1 &&
-  parts[0] &&
-  parts[0] !== "admin.html"
-) {
-  const redirect =
-    await handleRedirect(
-      request,
-      env,
-      ctx,
-      parts[0]
-    );
-
-  if (redirect) return redirect;
-}
+      if (parts.length === 1 && parts[0] && parts[0] !== "admin.html") {
+        const redirect = await handleRedirect(request, env, ctx, parts[0]);
+        if (redirect) return redirect;
+      }
 
       const assetResponse = await env.ASSETS.fetch(request);
       const headers = new Headers(assetResponse.headers);
@@ -954,8 +957,8 @@ export default {
       if (error instanceof RequestError) {
         return json({ error: error.message }, error.status);
       }
-      console.error(error);
-      return json({ error: error?.message || "Server error" }, 500);
+      console.error("Unhandled request error", error);
+      return json({ error: "服务器内部错误，请稍后重试" }, 500);
     }
   },
 };

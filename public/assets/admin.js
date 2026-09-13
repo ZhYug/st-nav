@@ -165,40 +165,19 @@ function renderLinks() {
 
     return `
       <tr class="link-dense-row">
-        <td>
-          <strong>/${esc(item.code)}</strong>
+        <td data-label="短码"><strong>/${esc(item.code)}</strong></td>
+        <td data-label="目标">
+          <div class="link-dense-title" title="${esc(item.title || item.url)}">${esc(item.title || item.url)}</div>
         </td>
-
-        <td>
-          <div class="link-dense-title">
-            ${esc(item.title || item.url)}
-          </div>
-        </td>
-
-        <td>
-          <span class="status ${item.enabled ? "on" : "off"}">
-          ${item.enabled ? "启用" : "停用"}
-          </span>
-        </td>
-
-        <td>
-          <span class="click-count">${item.clicks || 0}</span>
-        </td>
-
-        <td>
+        <td data-label="分类"><span class="link-category">${esc(item.category || "未分类")}</span></td>
+        <td data-label="点击"><span class="click-count">${Number(item.clicks || 0).toLocaleString()}</span></td>
+        <td data-label="状态"><span class="status ${item.enabled ? "on" : "off"}">${item.enabled ? "启用" : "停用"}</span></td>
+        <td data-label="操作">
           <div class="row-actions compact-actions">
-            <button class="small-btn" data-act="nav" data-id="${item.id}">
-              ${linked ? "✓" : "+"}
-            </button>
-            <button class="small-btn qr-btn" data-act="qr" data-id="${item.id}">
-              QR
-            </button>
-            <button class="small-btn edit-btn" data-act="edit" data-id="${item.id}">
-              ✎
-            </button>
-            <button class="small-btn danger-btn del-btn" data-act="del" data-id="${item.id}">
-              ×
-            </button>
+            <button class="small-btn" data-act="nav" data-id="${item.id}" aria-label="${linked ? "已在导航" : "添加到导航"}" title="${linked ? "已在导航" : "添加到导航"}">${linked ? "✓" : "+"}</button>
+            <button class="small-btn qr-btn" data-act="qr" data-id="${item.id}" aria-label="二维码" title="二维码">QR</button>
+            <button class="small-btn edit-btn" data-act="edit" data-id="${item.id}" aria-label="编辑" title="编辑">✎</button>
+            <button class="small-btn danger-btn del-btn" data-act="del" data-id="${item.id}" aria-label="删除" title="删除">×</button>
           </div>
         </td>
       </tr>`;
@@ -373,6 +352,8 @@ function renderNav() {
         ${item.link_id ? '<span class="linked-badge">短链接关联</span>' : '<span class="manual-badge">手动导航</span>'}
       </div>
       <div class="row-actions nav-admin-actions">
+        <button class="small-btn nav-move-btn" data-navact="up" data-id="${item.id}" aria-label="上移" title="上移">↑</button>
+        <button class="small-btn nav-move-btn" data-navact="down" data-id="${item.id}" aria-label="下移" title="下移">↓</button>
         <button class="small-btn" data-navact="copy" data-id="${item.id}">复制链接</button>
         <button class="small-btn" data-navact="edit" data-id="${item.id}">编辑</button>
         <button class="small-btn danger-btn" data-navact="del" data-id="${item.id}">删除</button>
@@ -423,6 +404,16 @@ $("#navAdminGrid").onclick = async (event) => {
   if (button.dataset.navact === "edit") navModal(item);
   if (button.dataset.navact === "del") deleteNav(item);
   if (button.dataset.navact === "copy") toast(await copyText(item.url) ? "链接已复制" : "复制失败");
+  if (button.dataset.navact === "up" || button.dataset.navact === "down") {
+    const currentIndex = A.nav.findIndex((value) => Number(value.id) === Number(item.id));
+    const targetIndex = currentIndex + (button.dataset.navact === "up" ? -1 : 1);
+    if (currentIndex >= 0 && targetIndex >= 0 && targetIndex < A.nav.length) {
+      [A.nav[currentIndex], A.nav[targetIndex]] = [A.nav[targetIndex], A.nav[currentIndex]];
+      A.nav.forEach((value, index) => { value.sort_order = index; });
+      renderNav();
+      toast("顺序已调整，点击“保存排序”后生效");
+    }
+  }
 };
 
 $("#saveNavOrder").onclick = async () => {
