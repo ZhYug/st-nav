@@ -1,11 +1,15 @@
 name = "st-nav"
-main = "./public/_worker.js"
+pages_build_output_dir = "./public"
 compatibility_date = "2026-09-11"
-
-[assets]
-directory = "./public"
-binding = "ASSETS"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "st-nav"
+# database_id = "<your-d1-database-id>"
+migrations_dir = "./migrations"
+
+[observability]
+enabled = true
+
+[vars]
+ST_NAV_VERSION = "1.0.3"

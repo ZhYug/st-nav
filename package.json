@@ -1,18 +1,24 @@
 {
   "name": "st-nav",
   "private": true,
-  "version": "1.0.2",
-  "description": "ST Nav — Cloudflare Workers + D1 one-click deployment",
+  "version": "1.0.3",
+  "description": "ST Nav — Cloudflare Pages Advanced Mode + D1",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "update": "wrangler deploy",
+    "build": "node scripts/pages-build.mjs",
+    "dev": "wrangler pages dev public",
+    "deploy": "npm run build && wrangler pages deploy public",
+    "update": "npm run deploy",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "doctor": "node scripts/doctor.mjs"
   },
   "cloudflare": {
     "bindings": {
       "ADMIN_PASSWORD": {
-        "description": "管理员登录密码。请设置至少 10 位的强密码。该值会作为加密会话签名密钥使用。"
+        "description": "管理员登录密码。请设置至少 10 位的强密码。"
+      },
+      "SESSION_SECRET": {
+        "description": "可选。用于签名管理会话的独立高熵 Secret；建议使用随机值。"
       }
     }
   },

@@ -1,3 +1,5 @@
-# 本地开发/Deploy to Cloudflare 会读取的秘密示例
-# 生产环境请在 Cloudflare 部署向导中填写，不要提交真实密码。
+# 本地开发：不要提交真实密码。
 ADMIN_PASSWORD="change-this-to-a-strong-password"
+# 可选：独立的会话签名密钥。生产环境建议设置为随机高熵 Secret。
+# 不设置时会兼容性回退到 ADMIN_PASSWORD。
+SESSION_SECRET="change-this-to-a-random-32-byte-secret"
