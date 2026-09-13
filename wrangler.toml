@@ -5,7 +5,7 @@ compatibility_date = "2026-09-11"
 [[d1_databases]]
 binding = "DB"
 database_name = "st-nav"
-database_id = "8390c468-3c92-4d64-95b9-10b90accb9b6d>"
+database_id = "8390c468-3c92-4d64-95b9-10b90accb9b6"
 migrations_dir = "./migrations"
 
 [observability]
