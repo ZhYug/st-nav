@@ -46,21 +46,21 @@ SELECT 'ChatGPT','AI 助手','https://chatgpt.com','','AI',3,1 WHERE (SELECT COU
 PRAGMA user_version = 1;
 `;
 
-let databaseReadyPromise;
+const databaseReady = new WeakMap();
 
 async function ensureDatabase(env) {
   if (!env.DB) throw new Error("D1 数据库绑定 DB 不存在，请检查 Cloudflare 部署配置。");
-  if (!databaseReadyPromise) {
-    databaseReadyPromise = (async () => {
+  let promise = databaseReady.get(env);
+  if (!promise) {
+    promise = (async () => {
       const row = await env.DB.prepare("PRAGMA user_version").first();
       if (Number(row?.user_version) >= 1) return;
       await env.DB.exec(SCHEMA_SQL);
-    })().catch((error) => {
-      databaseReadyPromise = undefined;
-      throw error;
-    });
+    })();
+    databaseReady.set(env, promise);
+    promise.catch(() => databaseReady.delete(env));
   }
-  await databaseReadyPromise;
+  await promise;
 }
 const JSON_HEADERS = {
   "content-type": "application/json;charset=UTF-8",
@@ -70,10 +70,17 @@ const JSON_HEADERS = {
   "permissions-policy": "camera=(), microphone=(), geolocation=()",
 };
 
+const SECURITY_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  "x-frame-options": "DENY",
+};
+
 const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), {
     status,
-    headers: { ...JSON_HEADERS, ...headers },
+    headers: { ...JSON_HEADERS, ...SECURITY_HEADERS, ...headers },
   });
 
 const now = () => new Date().toISOString();
@@ -161,6 +168,19 @@ function getCookie(request, name) {
   return match?.[1] || "";
 }
 
+async function safePasswordMatch(input, expected) {
+  const encoder = new TextEncoder();
+  const [left, right] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(String(input))),
+    crypto.subtle.digest("SHA-256", encoder.encode(String(expected))),
+  ]);
+  const a = new Uint8Array(left);
+  const b = new Uint8Array(right);
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
 function sessionSecret(env) {
   return String(env.SESSION_SECRET || env.ADMIN_PASSWORD || "");
 }
@@ -201,8 +221,35 @@ async function requireAuth(request, env) {
   return null;
 }
 
+class RequestError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
+
+const MAX_JSON_BODY_BYTES = 1024 * 1024;
+
 async function body(request) {
-  return await request.json().catch(() => ({}));
+  const length = Number(request.headers.get("content-length"));
+  if (Number.isFinite(length) && length > MAX_JSON_BODY_BYTES) {
+    throw new RequestError("请求体过大", 413);
+  }
+  const text = await request.text();
+  if (new TextEncoder().encode(text).byteLength > MAX_JSON_BODY_BYTES) {
+    throw new RequestError("请求体过大", 413);
+  }
+  if (!text.trim()) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new RequestError("请求 JSON 格式无效", 400);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new RequestError("请求 JSON 必须是对象", 400);
+  }
+  return parsed;
 }
 
 function routeParts(path) {
@@ -347,8 +394,8 @@ async function handleApi(request, env, ctx, parts) {
 
   if (path === "/api/auth/login" && method === "POST") {
     if (!sameOrigin(request)) return json({ error: "非法来源" }, 403);
-    if (!env.ADMIN_PASSWORD || String(env.ADMIN_PASSWORD).length < 10) {
-      return json({ error: "服务器尚未配置有效的管理员密码（至少 10 位）" }, 500);
+    if (!env.ADMIN_PASSWORD) {
+      return json({ error: "服务器尚未配置管理员密码" }, 500);
     }
     if (env.SESSION_SECRET && String(env.SESSION_SECRET).length < 32) {
       return json({ error: "SESSION_SECRET 至少需要 32 个字符" }, 500);
@@ -356,7 +403,7 @@ async function handleApi(request, env, ctx, parts) {
     const rate = checkLoginRateLimit(request);
     if (!rate.ok) return json({ error: "登录尝试过于频繁，请稍后再试" }, 429, { "retry-after": String(rate.retryAfter) });
     const data = await body(request);
-    if (String(data.password ?? "") !== String(env.ADMIN_PASSWORD)) {
+    if (!(await safePasswordMatch(data.password ?? "", env.ADMIN_PASSWORD))) {
       recordLoginFailure(request);
       return json({ error: "密码错误" }, 401);
     }
@@ -379,7 +426,7 @@ async function handleApi(request, env, ctx, parts) {
   }
 
   if (path === "/api/health" && method === "GET") {
-    return json({ ok: true, version: VERSION, database: true, session_secret: Boolean(env.SESSION_SECRET) });
+    return json({ ok: true, version: VERSION, database: Boolean(env.DB), session_secret: Boolean(env.SESSION_SECRET) });
   }
 
   if (path === "/api/public/bootstrap" && method === "GET") {
@@ -922,12 +969,12 @@ export default {
 
       const assetResponse = await env.ASSETS.fetch(request);
       const headers = new Headers(assetResponse.headers);
-      headers.set("x-content-type-options", "nosniff");
-      headers.set("referrer-policy", "strict-origin-when-cross-origin");
-      headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
-      headers.set("x-frame-options", "DENY");
+      Object.entries(SECURITY_HEADERS).forEach(([key, value]) => headers.set(key, value));
       return new Response(assetResponse.body, { status: assetResponse.status, statusText: assetResponse.statusText, headers });
     } catch (error) {
+      if (error instanceof RequestError) {
+        return json({ error: error.message }, error.status);
+      }
       console.error(error);
       return json({ error: error?.message || "Server error" }, 500);
     }
