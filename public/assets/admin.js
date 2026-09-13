@@ -3,7 +3,7 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 }[c]));
 
-const A = { links: [], nav: [], settings: {} };
+const A = { links: [], nav: [], settings: {}, navSelected: new Set(), navDirty: false };
 
 async function api(url, options = {}) {
   const response = await fetch(url, {
@@ -87,6 +87,8 @@ async function loadAll() {
     A.links = data.links || [];
     A.nav = data.navigation || [];
     A.settings = data.settings || {};
+    A.navSelected = new Set();
+    A.navDirty = false;
     renderDashboard(data.dashboard || {});
     renderLinks();
     renderNav();
@@ -359,14 +361,14 @@ function renderNav() {
   const element = $("#navAdminGrid");
   const items = navFilteredItems();
   const filtered = items.length !== A.nav.length;
-  $("#navCount").textContent = filtered ? `${items.length} / ${A.nav.length} 项` : `${A.nav.length} 项`;
+  $("#navCount").innerHTML = (filtered ? `${items.length} / ${A.nav.length} 项` : `${A.nav.length} 项`) + (A.navDirty ? '<span class="nav-dirty">未保存</span>' : '');
   $("#navFilterHint").classList.toggle("hidden", !filtered);
   element.innerHTML = items.map((item) => `
-    <div class="admin-nav-card" draggable="true" data-id="${item.id}">
+    <div class="admin-nav-card ${A.navSelected.has(item.id) ? "selected" : ""}" draggable="true" data-id="${item.id}">
       <div class="admin-nav-head">
-        <div class="admin-icon-wrap">
+        <div class="admin-nav-selection"><input type="checkbox" data-navact="select" data-id="${item.id}" ${A.navSelected.has(item.id) ? "checked" : ""} aria-label="选择 ${esc(item.title)}"><div class="admin-icon-wrap">
           <img class="site-icon" src="${esc(navIcon(item))}" alt="" onerror="this.outerHTML='<span class=&quot;site-icon site-icon-fallback&quot;>${esc(fallbackIcon(item))}</span>'">
-        </div>
+        </div></div>
         <div class="admin-nav-title"><strong>${esc(item.title)}</strong><small>${esc(item.category || "未分类")}</small></div>
         <span class="drag-handle">⠿</span>
       </div>
@@ -430,6 +432,12 @@ async function copyText(text) {
 $("#navAdminGrid").onclick = async (event) => {
   const button = event.target.closest("[data-navact]");
   if (!button) return;
+  if (button.dataset.navact === "select") {
+    const id = Number(button.dataset.id);
+    if (button.checked) A.navSelected.add(id); else A.navSelected.delete(id);
+    renderNav();
+    return;
+  }
   const item = A.nav.find((value) => value.id == button.dataset.id);
   if (!item) return;
   if (button.dataset.navact === "edit") navModal(item);
@@ -441,6 +449,7 @@ $("#navAdminGrid").onclick = async (event) => {
     if (currentIndex >= 0 && targetIndex >= 0 && targetIndex < A.nav.length) {
       [A.nav[currentIndex], A.nav[targetIndex]] = [A.nav[targetIndex], A.nav[currentIndex]];
       A.nav.forEach((value, index) => { value.sort_order = index; });
+      A.navDirty = true;
       renderNav();
       toast("顺序已调整，点击“保存排序”后生效");
     }
@@ -457,8 +466,33 @@ $("#clearNavFilter").onclick = () => {
 
 $("#saveNavOrder").onclick = async () => {
   const ids = [...document.querySelectorAll(".admin-nav-card")].map((node) => Number(node.dataset.id));
-  try { await api("/api/admin/navigation/reorder", { method: "POST", body: JSON.stringify({ ids }) }); toast("排序已保存"); await loadAll(); }
+  try { await api("/api/admin/navigation/reorder", { method: "POST", body: JSON.stringify({ ids }) }); A.navDirty = false; toast("排序已保存"); await loadAll(); }
   catch (error) { toast(error.message); }
+};
+
+async function updateSelectedNav(enabled) {
+  const selected = A.nav.filter((item) => A.navSelected.has(Number(item.id)));
+  if (!selected.length) return toast("请先选择导航项目");
+  try {
+    await Promise.all(selected.map((item) => api(`/api/admin/navigation/${item.id}`, { method: "PUT", body: JSON.stringify({ title: item.title, category: item.category || "", url: item.url, description: item.description || "", icon: item.icon || "", enabled }) })));
+    toast(enabled ? `已启用 ${selected.length} 项` : `已停用 ${selected.length} 项`);
+    await loadAll();
+  } catch (error) { toast(error.message); }
+}
+
+$("#selectAllNav").onclick = () => { navFilteredItems().forEach((item) => A.navSelected.add(Number(item.id))); renderNav(); };
+$("#clearSelectedNav").onclick = () => { A.navSelected.clear(); renderNav(); };
+$("#enableSelectedNav").onclick = () => updateSelectedNav(true);
+$("#disableSelectedNav").onclick = () => updateSelectedNav(false);
+$("#deleteSelectedNav").onclick = async () => {
+  const selected = A.nav.filter((item) => A.navSelected.has(Number(item.id)));
+  if (!selected.length) return toast("请先选择导航项目");
+  if (!confirm(`确定删除选中的 ${selected.length} 个导航项目吗？此操作不可撤销。`)) return;
+  try {
+    await Promise.all(selected.map((item) => api(`/api/admin/navigation/${item.id}`, { method: "DELETE" })));
+    toast(`已删除 ${selected.length} 项`);
+    await loadAll();
+  } catch (error) { toast(error.message); }
 };
 
 function navModal(item = null) {

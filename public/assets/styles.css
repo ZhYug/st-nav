@@ -768,3 +768,53 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
   .admin-page .stats-grid{gap:7px}.admin-page .stat-card{padding:10px}.admin-page .stat-value{font-size:20px}.admin-page .dashboard-grid{gap:8px}.admin-page .panel-head{padding:12px 12px 0}.admin-page .chart-wrap{height:175px;padding:5px}.admin-page .mini-list{padding:3px 12px 10px}.admin-page .mini-row{padding:9px 0}.admin-page .settings-form{padding:12px;gap:13px}.admin-page .settings-group{gap:9px;padding-bottom:12px}
 }
 @media (max-width:380px){.admin-page .admin-nav-grid{gap:6px}.admin-page .admin-nav-card{padding:8px}.admin-page .admin-nav-actions .small-btn{font-size:8px}.admin-page .admin-nav-actions .nav-move-btn{width:25px;min-width:25px;flex-basis:25px}.admin-page .admin-main{padding-left:9px;padding-right:9px}}
+
+/* v1.0.9 — mobile navigation cleanup + compact admin console */
+.mobile-nav-item:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}
+@media(max-width:600px){
+  .public-page{--mobile-bar-h:64px}
+  .public-page .admin-link{width:38px;min-height:38px;padding:0;font-size:0;position:relative}
+  .public-page .admin-link::before{content:"⚙";font-size:17px;line-height:1}
+  .public-page .topbar{padding-left:2px;padding-right:2px}
+  .public-page .mobile-bottom-nav{grid-template-columns:repeat(4,1fr);padding-top:6px;padding-bottom:calc(6px + env(safe-area-inset-bottom));min-height:calc(var(--mobile-bar-h) + env(safe-area-inset-bottom));}
+  .public-page .mobile-nav-item{min-height:48px;border-radius:12px}
+  .public-page .mobile-nav-icon{font-size:19px}
+  .public-page .hero{padding-bottom:22px}
+  .public-page .search-wrap{scroll-margin-top:84px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+  .public-page .toolbar{margin-bottom:10px}
+  body.public-page{padding-bottom:calc(var(--mobile-bar-h) + env(safe-area-inset-bottom) + 8px)}
+}
+
+/* Admin: denser, more app-like workspace */
+.admin-nav-selection{display:flex;align-items:center;gap:7px;min-width:0}
+.admin-nav-selection input{appearance:none;width:17px;height:17px;flex:0 0 17px;margin:0;border:1px solid var(--border2);border-radius:5px;background:var(--surface2);display:grid;place-items:center;cursor:pointer}
+.admin-nav-selection input:checked{background:var(--primary);border-color:var(--primary)}
+.admin-nav-selection input:checked::after{content:"✓";font-size:11px;color:white;font-weight:800}
+.admin-nav-card.selected{border-color:color-mix(in srgb,var(--primary) 60%,var(--border2));box-shadow:0 0 0 1px color-mix(in srgb,var(--primary) 20%,transparent),0 12px 30px rgba(0,0,0,.12)}
+.nav-admin-bulk{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.nav-admin-bulk .text-btn{height:34px;padding:0 9px;font-size:11px}
+.nav-admin-bulk .danger-btn{color:var(--danger,#ff6b7a)}
+.nav-dirty{display:inline-flex;align-items:center;gap:5px;margin-left:6px;color:var(--primary);font-size:10px;font-weight:700}
+.nav-dirty::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+@media(min-width:601px){
+  .admin-page .admin-nav-toolbar{grid-template-columns:minmax(220px,1fr) 180px auto}
+  .admin-page .admin-nav-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+  .admin-page .admin-nav-card{padding:10px;border-radius:11px}
+  .admin-page .admin-nav-card p{height:28px;margin-top:6px;font-size:10px}
+  .admin-page .admin-nav-actions .small-btn{height:28px;min-height:28px;font-size:9px}
+}
+@media(max-width:1180px) and (min-width:601px){.admin-page .admin-nav-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:600px){
+  .admin-page .section-bar .section-actions-extra{width:100%}
+  .admin-page .nav-admin-toolbar{grid-template-columns:minmax(0,1fr) 112px}
+  .admin-page .nav-admin-bulk{display:grid;grid-template-columns:1fr 1fr;width:100%;gap:5px}
+  .admin-page .nav-admin-bulk .text-btn{width:100%;height:34px}
+  .admin-page .nav-admin-card{padding:8px}
+  .admin-page .admin-nav-selection input{width:16px;height:16px;flex-basis:16px}
+  .admin-page .admin-nav-title{min-width:0}
+  .admin-page .admin-nav-title strong{font-size:10px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .admin-page .admin-nav-title small{font-size:8px}
+  .admin-page .admin-nav-card p{height:26px;font-size:8.5px}
+  .admin-page .nav-admin-actions .small-btn{height:28px;min-height:28px;font-size:8.5px}
+  .admin-page .nav-dirty{font-size:9px}
+}

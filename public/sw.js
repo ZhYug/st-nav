@@ -1,4 +1,4 @@
-const CACHE = "st-nav-shell-v1";
+const CACHE = "st-nav-shell-v2";
 const SHELL = ["/", "/assets/styles.css", "/assets/app.js", "/assets/favicon.svg", "/manifest.webmanifest"];
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -295,7 +295,6 @@ function initMobileAppUI() {
     const item = event.target.closest("[data-mobile-action]");
     if (!item) return;
     const action = item.dataset.mobileAction;
-    if (action === "admin") return;
     event.preventDefault();
     if (action === "home") {
       state.category = "全部";
@@ -315,6 +314,11 @@ function initMobileAppUI() {
     } else if (action === "recent") {
       $(".recent-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
       setMobileNav("recent");
+    } else if (action === "search") {
+      const input = $("#searchInput");
+      input?.focus({ preventScroll: true });
+      input?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setMobileNav("search");
     }
   });
 }
