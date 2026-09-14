@@ -107,12 +107,13 @@ function validUrl(value) {
   }
 }
 
-function faviconUrl(value, version = "") {
+function faviconUrl(value) {
   try {
     const hostname = new URL(String(value)).hostname.toLowerCase();
     if (!hostname) return "";
-    const suffix = version ? `?v=${encodeURIComponent(version)}` : "";
-    return `https://icons.duckduckgo.com/ip3/${encodeURIComponent(hostname)}.ico${suffix}`;
+    // DuckDuckGo favicon endpoint should be kept in its canonical form.
+    // Do not append cache-busting query parameters such as ?v=timestamp.
+    return `https://icons.duckduckgo.com/ip3/${encodeURIComponent(hostname)}.ico`;
   } catch {
     return "";
   }
@@ -644,7 +645,7 @@ async function handleApi(request, env, ctx, parts) {
             clean(data.title, 200),
             clean(data.description, 500),
             clean(data.category, 80),
-            faviconUrl(url, timestamp),
+            faviconUrl(url),
             data.enabled === false ? 0 : 1,
             timestamp,
             id
@@ -732,7 +733,7 @@ async function handleApi(request, env, ctx, parts) {
       const requestUrl = new URL(request.url);
       const shortUrl = requestUrl.origin + "/" + link.code;
 
-      const icon = faviconUrl(link.url, now());
+      const icon = faviconUrl(link.url);
 
       await env.DB.prepare(
         `INSERT INTO navigation
