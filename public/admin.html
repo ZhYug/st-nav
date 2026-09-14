@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b0d12"><title>管理后台</title>
-  <link rel="icon" href="/assets/favicon.svg"><link rel="stylesheet" href="/assets/styles.css?v=1.1.3">
+  <link rel="icon" href="/assets/favicon.svg"><link rel="stylesheet" href="/assets/styles.css?v=1.1.4">
 </head>
 <body class="admin-page">
   <div id="loginView" class="login-view">
@@ -36,7 +36,7 @@
       </section>
       <section id="section-links" class="admin-section hidden">
         <div class="section-bar"><div><h2>短链接</h2><p>创建、管理和分析你的短链接。</p></div><div class="bar-actions"><button class="btn secondary" id="exportLinks">导出 CSV</button><button class="btn primary" id="addLinkBtn">+ 新建短链接</button></div></div>
-        <div class="panel table-panel"><div class="table-tools"><input id="linkSearch" placeholder="搜索短链接…"><button class="btn secondary" id="importLinksBtn">批量导入 CSV</button><input id="csvFile" type="file" accept=".csv,text/csv" class="hidden"></div><div class="table-scroll"><table><thead><tr><th>短码</th><th>目标</th><th>分类</th><th>点击</th><th>状态</th><th></th></tr></thead><tbody id="linksTable"></tbody></table></div><div id="linksPagination" class="pagination"></div></div>
+        <div class="panel table-panel"><div class="table-tools"><input id="linkSearch" placeholder="搜索短链接…"><button class="text-btn" id="selectAllLinks" type="button">全选</button><button class="text-btn" id="clearSelectedLinks" type="button">取消选择</button><button class="btn secondary" id="importLinksBtn">批量导入 CSV</button><input id="csvFile" type="file" accept=".csv,text/csv" class="hidden"></div><div class="table-scroll"><table><thead><tr><th>选择</th><th>短码</th><th>目标</th><th>分类</th><th>点击</th><th>状态</th><th></th></tr></thead><tbody id="linksTable"></tbody></table></div><div id="linksPagination" class="pagination"></div></div>
       </section>
       <section id="section-navigation" class="admin-section hidden">
         <div class="section-bar"><div><h2>导航管理</h2><p>拖拽调整顺序；关联短链接会自动同步。<span id="navCount" class="section-count">0 项</span></p></div><div class="bar-actions"><button class="btn secondary" id="saveNavOrder">保存排序</button><button class="btn primary" id="addNavBtn">+ 添加导航</button></div></div>
@@ -87,7 +87,7 @@
   </div>
   <div id="modal" class="modal hidden"><div class="modal-backdrop" data-close-modal></div><div class="modal-card"><div class="modal-head"><h3 id="modalTitle"></h3><button class="icon-btn" data-close-modal>×</button></div><div id="modalBody"></div></div></div>
   <div id="toastRoot" class="toast-root"></div>
-  <script src="/assets/common.js?v=1.1.3" defer></script>
-  <script src="/assets/admin.js?v=1.1.3" defer></script>
+  <script src="/assets/common.js?v=1.1.4" defer></script>
+  <script src="/assets/admin.js?v=1.1.4" defer></script>
 </body>
 </html>
