@@ -1,5 +1,5 @@
 
-const VERSION = "1.1.6";
+const VERSION = "1.1.7";
 const SESSION_COOKIE = "__Host-stnav_session";
 const SESSION_TTL = 86400;
 const PUBLIC_CACHE_CONTROL = "public, max-age=0, s-maxage=30, stale-while-revalidate=60";
@@ -515,7 +515,7 @@ async function handleApi(request, env, ctx, parts) {
       // One INSERT...SELECT keeps the operation efficient for large selections and
       // the UNIQUE(link_id) index makes repeated "add to navigation" idempotent.
       let affected = 0;
-      for (const chunk of chunks(ids, 400)) {
+      for (const chunk of chunks(ids, 90)) {
         const marks = placeholders(chunk.length);
         const origin = new URL(request.url).origin;
         // Fetch selected links once, then insert them in bounded D1 batches.
@@ -564,7 +564,7 @@ async function handleApi(request, env, ctx, parts) {
 
     let affected = 0;
     const deletedCodes = [];
-    for (const chunk of chunks(ids, 400)) {
+    for (const chunk of chunks(ids, 90)) {
       const marks = placeholders(chunk.length);
       const timestamp = now();
 
