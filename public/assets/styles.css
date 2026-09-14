@@ -913,12 +913,3 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
   .public-page .nav-category-section{margin-bottom:22px}
   .public-page .nav-category-heading{font-size:15px;margin-bottom:9px}
 }
-
-
-/* v1.1.4 linked navigation selection */
-.link-select-checkbox{appearance:none;width:17px;height:17px;margin:0;border:1px solid var(--border2);border-radius:5px;background:var(--surface2);display:inline-grid;place-items:center;cursor:pointer;vertical-align:middle}
-.link-select-checkbox:checked{background:var(--primary);border-color:var(--primary)}
-.link-select-checkbox:checked::after{content:"✓";font-size:11px;color:white;font-weight:800}
-.link-dense-row.selected-row{background:color-mix(in srgb,var(--primary) 7%,transparent)}
-.admin-page .table-tools .text-btn{height:38px;padding:0 10px;font-size:11px}
-@media(max-width:700px){.admin-page .table-tools .text-btn{height:36px}.admin-page .link-select-checkbox{width:16px;height:16px}}

@@ -1,5 +1,5 @@
 const A = {
-  links: [], nav: [], settings: {}, navSelected: new Set(), linkSelected: new Set(), navDirty: false,
+  links: [], nav: [], settings: {}, navSelected: new Set(), navDirty: false,
   linkPage: 1, navPage: 1, linkPageSize: Number(localStorage.getItem("stnav_link_page_size")) || 10, navPageSize: Number(localStorage.getItem("stnav_nav_page_size")) || 12,
 };
 
@@ -75,7 +75,6 @@ async function loadAll() {
     A.nav = data.navigation || [];
     A.settings = data.settings || {};
     A.navSelected = new Set();
-    A.linkSelected = new Set();
     A.navDirty = false;
     A.linkPage = 1;
     A.navPage = 1;
@@ -193,8 +192,7 @@ function renderLinks() {
   $("#linksTable").innerHTML = pageRows.map((item) => {
     const linked = linkedNav(item);
     return `
-      <tr class="link-dense-row ${A.linkSelected.has(Number(item.id)) ? "selected-row" : ""}">
-        <td data-label="选择"><input class="link-select-checkbox" type="checkbox" data-act="select-link" data-id="${item.id}" ${A.linkSelected.has(Number(item.id)) ? "checked" : ""} aria-label="选择 /${esc(item.code)}"></td>
+      <tr class="link-dense-row">
         <td data-label="短码"><strong>/${esc(item.code)}</strong></td>
         <td data-label="目标"><div class="link-dense-title" title="${esc(item.title || item.url)}">${esc(item.title || item.url)}</div></td>
         <td data-label="分类"><span class="link-category">${esc(item.category || "未分类")}</span></td>
@@ -206,7 +204,7 @@ function renderLinks() {
           <button class="small-btn danger-btn del-btn" data-act="del" data-id="${item.id}" aria-label="删除" title="删除">×</button>
         </div></td>
       </tr>`;
-  }).join("") || '<tr><td colspan="7" style="text-align:center;padding:30px">暂无短链接</td></tr>';
+  }).join("") || '<tr><td colspan="6" style="text-align:center;padding:30px">暂无短链接</td></tr>';
 
   renderPagination("#linksPagination", A.linkPage, rows.length, A.linkPageSize, (page, pageSize) => {
     A.linkPage = page;
@@ -221,20 +219,6 @@ $("#linksTable").onclick = (event) => {
   if (!button) return;
   const item = A.links.find((value) => value.id == button.dataset.id);
   if (!item) return;
-  if (button.dataset.act === "select-link") {
-    const id = Number(item.id);
-    if (button.checked) {
-      A.linkSelected.add(id);
-      const nav = linkedNav(item);
-      if (nav) A.navSelected.add(Number(nav.id));
-    } else {
-      A.linkSelected.delete(id);
-      const nav = linkedNav(item);
-      if (nav) A.navSelected.delete(Number(nav.id));
-    }
-    renderLinks();
-    return;
-  }
   if (button.dataset.act === "edit") linkModal(item);
   if (button.dataset.act === "del") deleteLink(item);
   if (button.dataset.act === "nav") addLinkToNavigation(item);
@@ -299,13 +283,6 @@ async function deleteLink(item) {
 
 $("#addLinkBtn").onclick = () => linkModal();
 $("#addNavBtn").onclick = () => navModal();
-$("#selectAllLinks").onclick = () => {
-  const query = ($("#linkSearch")?.value || "").trim().toLowerCase();
-  A.links.filter((item) => [item.code, item.url, item.title, item.category].join(" ").toLowerCase().includes(query))
-    .forEach((item) => { A.linkSelected.add(Number(item.id)); const nav = linkedNav(item); if (nav) A.navSelected.add(Number(nav.id)); });
-  renderLinks();
-};
-$("#clearSelectedLinks").onclick = () => { A.linkSelected.clear(); A.navSelected.clear(); renderLinks(); };
 
 function navIcon(item) { return item.icon || iconUrl(item.url); }
 
@@ -355,7 +332,7 @@ function renderNav() {
         <button class="small-btn nav-move-btn" data-navact="up" data-id="${item.id}" aria-label="上移" title="上移">↑</button>
         <button class="small-btn nav-move-btn" data-navact="down" data-id="${item.id}" aria-label="下移" title="下移">↓</button>
         <button class="small-btn" data-navact="copy" data-id="${item.id}">复制链接</button>
-        ${item.link_id ? `<button class="small-btn" data-navact="edit-link" data-id="${item.id}">编辑短链接</button>` : `<button class="small-btn" data-navact="edit" data-id="${item.id}">编辑</button>`}
+        <button class="small-btn" data-navact="edit" data-id="${item.id}">编辑</button>
         <button class="small-btn danger-btn" data-navact="del" data-id="${item.id}">删除</button>
       </div>
     </div>
@@ -411,25 +388,13 @@ $("#navAdminGrid").onclick = async (event) => {
   if (!button) return;
   if (button.dataset.navact === "select") {
     const id = Number(button.dataset.id);
-    const nav = A.nav.find((value) => Number(value.id) === id);
-    if (!nav) return;
-    if (button.checked) {
-      A.navSelected.add(id);
-      if (nav.link_id) A.linkSelected.add(Number(nav.link_id));
-    } else {
-      A.navSelected.delete(id);
-      if (nav.link_id) A.linkSelected.delete(Number(nav.link_id));
-    }
+    if (button.checked) A.navSelected.add(id); else A.navSelected.delete(id);
     renderNav();
     return;
   }
   const item = A.nav.find((value) => value.id == button.dataset.id);
   if (!item) return;
   if (button.dataset.navact === "edit") navModal(item);
-  if (button.dataset.navact === "edit-link") {
-    const link = A.links.find((value) => Number(value.id) === Number(item.link_id));
-    if (link) { A.linkSelected.add(Number(link.id)); switchSection("links"); linkModal(link); }
-  }
   if (button.dataset.navact === "del") deleteNav(item);
   if (button.dataset.navact === "copy") toast(await copyText(item.url) ? "链接已复制" : "复制失败");
   if (button.dataset.navact === "up" || button.dataset.navact === "down") {
@@ -462,50 +427,15 @@ $("#saveNavOrder").onclick = async () => {
 async function updateSelectedNav(enabled) {
   const selected = A.nav.filter((item) => A.navSelected.has(Number(item.id)));
   if (!selected.length) return toast("请先选择导航项目");
-
-  const linked = selected.filter((item) => item.link_id);
-  const manual = selected.filter((item) => !item.link_id);
-  const linkedNames = linked.map((item) => `「${item.title}」`).join("、");
-
   try {
-    if (manual.length) {
-      await Promise.all(manual.map((item) => api(`/api/admin/navigation/${item.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ title: item.title, category: item.category || "", url: item.url, description: item.description || "", icon: item.icon || "", enabled })
-      })));
-    }
-
-    linked.forEach((item) => A.linkSelected.add(Number(item.link_id)));
-
-    if (linked.length) {
-      const action = enabled ? "启用" : "停用";
-      const message = `${action}操作中，${linkedNames} 已关联短链接，请在「短链接」中编辑内容。对应短链接已同时选中。`;
-      if (manual.length) toast(`已${action} ${manual.length} 个手动导航；${message}`);
-      else toast(message);
-      await loadAll();
-      // loadAll resets selection; restore linked selections so user can continue editing.
-      linked.forEach((item) => {
-        A.linkSelected.add(Number(item.link_id));
-        A.navSelected.add(Number(item.id));
-      });
-      switchSection("links");
-      renderLinks();
-      return;
-    }
-
-    toast(enabled ? `已启用 ${manual.length} 项` : `已停用 ${manual.length} 项`);
+    await Promise.all(selected.map((item) => api(`/api/admin/navigation/${item.id}`, { method: "PUT", body: JSON.stringify({ title: item.title, category: item.category || "", url: item.url, description: item.description || "", icon: item.icon || "", enabled }) })));
+    toast(enabled ? `已启用 ${selected.length} 项` : `已停用 ${selected.length} 项`);
     await loadAll();
   } catch (error) { toast(error.message); }
 }
 
-$("#selectAllNav").onclick = () => {
-  navFilteredItems().forEach((item) => {
-    A.navSelected.add(Number(item.id));
-    if (item.link_id) A.linkSelected.add(Number(item.link_id));
-  });
-  renderNav();
-};
-$("#clearSelectedNav").onclick = () => { A.navSelected.clear(); A.linkSelected.clear(); renderNav(); };
+$("#selectAllNav").onclick = () => { navFilteredItems().forEach((item) => A.navSelected.add(Number(item.id))); renderNav(); };
+$("#clearSelectedNav").onclick = () => { A.navSelected.clear(); renderNav(); };
 $("#enableSelectedNav").onclick = () => updateSelectedNav(true);
 $("#disableSelectedNav").onclick = () => updateSelectedNav(false);
 $("#deleteSelectedNav").onclick = async () => {
