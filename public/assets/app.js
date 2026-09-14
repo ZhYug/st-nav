@@ -29,10 +29,43 @@ function scheduleRender() {
 
 function iconUrl(url) {
   try {
-    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(new URL(url).hostname)}&sz=128`;
+    const hostname = new URL(url).hostname.toLowerCase();
+    return hostname
+      ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=128`
+      : "";
   } catch {
     return "";
   }
+}
+
+function iconFallbackHtml(item) {
+  return `<span class="site-icon site-icon-fallback">${esc(fallbackIcon(item))}</span>`;
+}
+
+function handleIconError(img) {
+  const item = state.items.find((entry) => String(entry.id) === String(img.dataset.itemId));
+  if (!item) {
+    img.outerHTML = '<span class="site-icon site-icon-fallback">🌐</span>';
+    return;
+  }
+  const stage = Number(img.dataset.iconStage || "0");
+  const hostname = (() => {
+    try { return new URL(item.url).hostname.toLowerCase(); } catch { return ""; }
+  })();
+
+  if (stage === 0 && hostname) {
+    img.dataset.iconStage = "1";
+    img.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=128`;
+    return;
+  }
+
+  if (stage <= 1 && hostname) {
+    img.dataset.iconStage = "2";
+    img.src = `https://icons.duckduckgo.com/ip3/${encodeURIComponent(hostname)}.ico`;
+    return;
+  }
+
+  img.outerHTML = iconFallbackHtml(item);
 }
 
 function fallbackIcon(item) {
@@ -150,7 +183,7 @@ function cardHtml(item, index) {
   return `<article class="nav-card" style="animation:fadeUp .28s ease ${Math.min(index, 10) * 0.035}s both" data-id="${item.id}">
     <div class="nav-top">
       <a class="nav-card-open" href="${esc(displayUrl)}" aria-label="打开 ${esc(item.title)}">
-        <img class="site-icon" src="${esc(icon)}" alt="" loading="${index < 8 ? "eager" : "lazy"}" decoding="async" fetchpriority="${index < 4 ? "high" : "low"}" onerror="this.outerHTML='<span class=&quot;site-icon site-icon-fallback&quot;>${esc(fallback)}</span>'">
+        <img class="site-icon" src="${esc(icon)}" data-item-id="${esc(item.id)}" alt="" loading="${index < 8 ? "eager" : "lazy"}" decoding="async" fetchpriority="${index < 4 ? "high" : "low"}" onerror="handleIconError(this)">
       </a>
       <div class="nav-card-actions">
         <button class="copy-btn" data-copy="${item.id}" title="复制链接" aria-label="复制链接">⧉</button>
@@ -256,7 +289,7 @@ async function copyText(text) {
 function renderRecent() {
   const items = state.recent.map((id) => state.items.find((item) => item.id === id)).filter(Boolean);
   $("#recentGrid").innerHTML = items.length
-    ? items.map((item) => `<a class="recent-item" href="${esc(item.code ? location.origin + "/" + item.code : item.url)}"><img src="${esc(item.icon || iconUrl(item.url))}" alt="" loading="lazy" decoding="async" onerror="this.outerHTML='<span class=&quot;recent-icon-fallback&quot;>${esc(fallbackIcon(item))}</span>'"><span>${esc(item.title)}</span></a>`).join("")
+    ? items.map((item) => `<a class="recent-item" href="${esc(item.code ? location.origin + "/" + item.code : item.url)}"><img src="${esc(item.icon || iconUrl(item.url))}" data-item-id="${esc(item.id)}" alt="" loading="lazy" decoding="async" onerror="handleIconError(this)"><span>${esc(item.title)}</span></a>`).join("")
     : '<span style="color:var(--faint);font-size:13px">还没有访问记录</span>';
 }
 

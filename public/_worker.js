@@ -107,6 +107,17 @@ function validUrl(value) {
   }
 }
 
+function faviconUrl(value, version = "") {
+  try {
+    const hostname = new URL(String(value)).hostname.toLowerCase();
+    if (!hostname) return "";
+    const suffix = version ? `?v=${encodeURIComponent(version)}` : "";
+    return `https://icons.duckduckgo.com/ip3/${encodeURIComponent(hostname)}.ico${suffix}`;
+  } catch {
+    return "";
+  }
+}
+
 function clean(value, max = 2000) {
   return String(value ?? "").trim().slice(0, max);
 }
@@ -627,12 +638,13 @@ async function handleApi(request, env, ctx, parts) {
           ),
           env.DB.prepare(
             `UPDATE navigation
-             SET title=?,description=?,category=?,enabled=?,updated_at=?
+             SET title=?,description=?,category=?,icon=?,enabled=?,updated_at=?
              WHERE link_id=?`
           ).bind(
             clean(data.title, 200),
             clean(data.description, 500),
             clean(data.category, 80),
+            faviconUrl(url, timestamp),
             data.enabled === false ? 0 : 1,
             timestamp,
             id
@@ -720,10 +732,7 @@ async function handleApi(request, env, ctx, parts) {
       const requestUrl = new URL(request.url);
       const shortUrl = requestUrl.origin + "/" + link.code;
 
-      const icon =
-        "https://icons.duckduckgo.com/ip3/" +
-        encodeURIComponent(new URL(link.url).hostname) +
-        ".ico";
+      const icon = faviconUrl(link.url, now());
 
       await env.DB.prepare(
         `INSERT INTO navigation
