@@ -134,7 +134,6 @@ function cardHtml(item, index) {
   const displayUrl = item.code ? location.origin + "/" + item.code : item.url;
   const favorite = state.favorites.includes(item.id);
   const icon = item.icon || iconUrl(item.target_url || item.link_url || item.url);
-  let fallback = fallbackIcon(item);
     return `<article class="nav-card" style="animation:fadeUp .28s ease ${Math.min(index, 10) * 0.035}s both" data-id="${item.id}">
     <div class="nav-top">
       <a class="nav-card-open" href="${esc(displayUrl)}" aria-label="打开 ${esc(item.title)}">

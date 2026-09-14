@@ -3,8 +3,8 @@ const VERSION = "1.1.5";
 const SESSION_COOKIE = "__Host-stnav_session";
 const SESSION_TTL = 86400;
 const PUBLIC_CACHE_CONTROL = "public, max-age=0, s-maxage=30, stale-while-revalidate=60";
-const REDIRECT_CACHE_CONTROL = PUBLIC_CACHE_CONTROL;
 const databaseReady = new WeakMap();
+const REQUIRED_TABLES = ["links", "link_daily_stats", "navigation", "settings"];
 
 async function ensureDatabase(env) {
   if (!env.DB) {
@@ -14,7 +14,6 @@ async function ensureDatabase(env) {
   let promise = databaseReady.get(env);
   if (!promise) {
     promise = (async () => {
-      const requiredTables = ["links", "link_daily_stats", "navigation", "settings"];
       const result = await env.DB
         .prepare(`
           SELECT name
@@ -22,11 +21,11 @@ async function ensureDatabase(env) {
           WHERE type = 'table'
             AND name IN (?, ?, ?, ?)
         `)
-        .bind(...requiredTables)
+        .bind(...REQUIRED_TABLES)
         .all();
 
       const existing = new Set((result.results ?? []).map((row) => row.name));
-      const missing = requiredTables.filter((name) => !existing.has(name));
+      const missing = REQUIRED_TABLES.filter((name) => !existing.has(name));
 
       if (missing.length) {
         throw new Error(
@@ -194,7 +193,7 @@ async function isAuthed(request, env) {
     const data = JSON.parse(base64urlDecode(payload));
     if (!data.exp || data.exp < Date.now()) return false;
     const signatureBytes = Uint8Array.from(
-      atob(signature.replaceAll("-", "+").replaceAll("_", "/") + "===".slice((signature.length + 3) % 4)),
+      base64urlDecode(signature),
       (char) => char.charCodeAt(0)
     );
     const key = await crypto.subtle.importKey(
@@ -270,7 +269,7 @@ function redirectCacheKey(request, code) {
   return new Request(url.toString(), { method: "GET" });
 }
 
-function redirectCacheAvailable() {
+function cacheAvailable() {
   return typeof caches !== "undefined" && !!caches.default;
 }
 
@@ -284,12 +283,12 @@ function waitUntil(ctx, promise) {
 }
 
 function invalidateRedirectCache(request, ctx, code) {
-  if (!code || !redirectCacheAvailable()) return;
+  if (!code || !cacheAvailable()) return;
   waitUntil(ctx, caches.default.delete(redirectCacheKey(request, code)));
 }
 
 function invalidatePublicCache(request, ctx) {
-  if (typeof caches === "undefined" || !caches.default) return;
+  if (!cacheAvailable()) return;
   const key = publicCacheKey(request);
   waitUntil(ctx, caches.default.delete(key));
 }
@@ -331,7 +330,7 @@ function cachePut(cache, key, response, ctx) {
 }
 
 async function cachedPublicBootstrap(request, env, ctx) {
-  if (!redirectCacheAvailable()) return json(publicPayload(await getPublicBootstrap(env), request));
+  if (!cacheAvailable()) return json(publicPayload(await getPublicBootstrap(env), request));
 
   const cache = caches.default;
   const key = publicCacheKey(request);
@@ -783,7 +782,7 @@ async function handleRedirect(request, env, ctx, code) {
   if (!CODE_RE.test(code)) return null;
   let link = null;
 
-  if (redirectCacheAvailable()) {
+  if (cacheAvailable()) {
     try {
       const cached = await caches.default.match(redirectCacheKey(request, code));
       if (cached) link = await cached.json();
@@ -798,9 +797,9 @@ async function handleRedirect(request, env, ctx, code) {
     ).bind(code).first();
     if (!link) return null;
 
-    if (redirectCacheAvailable()) {
+    if (cacheAvailable()) {
       try {
-        const response = json(link, 200, { "cache-control": REDIRECT_CACHE_CONTROL });
+        const response = json(link, 200, { "cache-control": PUBLIC_CACHE_CONTROL });
         const put = caches.default.put(redirectCacheKey(request, code), response);
         if (ctx?.waitUntil) ctx.waitUntil(put);
       } catch (error) {

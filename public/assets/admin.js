@@ -11,6 +11,12 @@ function toast(message) {
   setTimeout(() => node.remove(), 2600);
 }
 
+function formData(form) {
+  const data = Object.fromEntries(new FormData(form).entries());
+  data.enabled = form.elements.enabled?.checked ?? false;
+  return data;
+}
+
 async function boot() {
   try {
     const me = await api("/api/auth/me");
@@ -237,9 +243,7 @@ function linkModal(item = null) {
   `);
   $("#linkForm").onsubmit = async (event) => {
     event.preventDefault();
-    const form = new FormData(event.target);
-    const data = Object.fromEntries(form.entries());
-    data.enabled = form.get("enabled") === "on";
+    const data = formData(event.target);
     try {
       await api(item ? `/api/admin/links/${item.id}` : "/api/admin/links", {
         method: item ? "PUT" : "POST",
@@ -463,9 +467,7 @@ function navModal(item = null) {
   `);
   $("#navForm").onsubmit = async (event) => {
     event.preventDefault();
-    const form = new FormData(event.target);
-    const data = Object.fromEntries(form.entries());
-    data.enabled = form.get("enabled") === "on";
+    const data = formData(event.target);
     if (item?.link_id) return;
     try {
       await api(item ? `/api/admin/navigation/${item.id}` : "/api/admin/navigation", {
@@ -497,7 +499,7 @@ function fillSettings() {
 
 $("#settingsForm").onsubmit = async (event) => {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.target).entries());
+  const data = formData(event.target);
   try {
     await api("/api/admin/settings", { method: "PUT", body: JSON.stringify(data) });
     A.settings = { ...A.settings, ...data };
@@ -522,7 +524,7 @@ $("#exportLinks").onclick = () => {
   link.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
   link.download = "shortlinks.csv";
   link.click();
-  URL.revokeObjectURL(link.href);
+  setTimeout(() => URL.revokeObjectURL(link.href), 0);
 };
 
 const csvInput = $("#csvFile");
