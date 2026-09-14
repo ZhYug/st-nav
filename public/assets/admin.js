@@ -3,8 +3,7 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 }[c]));
 
-const A = { links: [], nav: [], settings: {}, navSelected: new Set(), navSelectionAll: false, navDirty: false, linksMeta: { page: 1, pageSize: 50, total: 0, totalPages: 1 }, navMeta: { page: 1, pageSize: 50, total: 0, totalPages: 1 }, navCategories: [] };
-let searchTimer = null;
+const A = { links: [], nav: [], settings: {}, navSelected: new Set(), navDirty: false };
 
 async function api(url, options = {}) {
   const response = await fetch(url, {
@@ -85,38 +84,19 @@ function switchSection(section) {
 async function loadAll() {
   try {
     const data = await api("/api/admin/bootstrap");
+    A.links = data.links || [];
+    A.nav = data.navigation || [];
     A.settings = data.settings || {};
     A.navSelected = new Set();
-    A.navSelectionAll = false;
     A.navDirty = false;
     renderDashboard(data.dashboard || {});
+    renderLinks();
+    renderNav();
     fillSettings();
-    await Promise.all([loadLinkPage(1), loadNavPage(1)]);
   } catch (error) {
     toast(error.message);
     if (error.message === "未登录") showLogin();
   }
-}
-
-async function loadLinkPage(page = A.linksMeta.page || 1) {
-  const q = encodeURIComponent(($("#linkSearch")?.value || "").trim());
-  const data = await api(`/api/admin/links?page=${page}&pageSize=${A.linksMeta.pageSize || 50}&q=${q}`);
-  A.links = data.items || [];
-  A.linksMeta = data;
-  if (!A.links.length && data.page > 1 && data.page > data.totalPages) return loadLinkPage(data.totalPages);
-  renderLinks();
-}
-
-async function loadNavPage(page = A.navMeta.page || 1) {
-  const q = encodeURIComponent(($("#navSearch")?.value || "").trim());
-  const category = encodeURIComponent($("#navCategoryFilter")?.value || "");
-  const data = await api(`/api/admin/navigation?page=${page}&pageSize=${A.navMeta.pageSize || 50}&q=${q}&category=${category}`);
-  A.nav = data.items || [];
-  A.navMeta = data;
-  A.navCategories = data.categories || A.navCategories;
-  if (!A.nav.length && data.page > 1 && data.page > data.totalPages) return loadNavPage(data.totalPages);
-  A.navSelected = new Set([...A.navSelected].filter((id) => A.nav.some((item) => Number(item.id) === Number(id))));
-  renderNav();
 }
 
 function renderDashboard(data) {
@@ -169,12 +149,18 @@ function drawChart(rows) {
 }
 
 function linkedNav(item) {
-  if (item?.navigation_id) return { id: item.navigation_id };
-  return A.nav.find((nav) => Number(nav.link_id) === Number(item?.id));
+  return A.nav.find((nav) => Number(nav.link_id) === Number(item.id));
 }
 
 function renderLinks() {
-  const rows = A.links;
+  const query = ($("#linkSearch")?.value || "").toLowerCase();
+
+  const rows = A.links.filter((item) =>
+    [item.code, item.url, item.title, item.category]
+      .join(" ")
+      .toLowerCase()
+      .includes(query)
+  );
 
   $("#linksTable").innerHTML = rows.map((item) => {
     const linked = linkedNav(item);
@@ -199,10 +185,9 @@ function renderLinks() {
       </tr>`;
   }).join("") ||
   '<tr><td colspan="5" style="text-align:center;padding:30px">暂无短链接</td></tr>';
-  renderPagination("linksPagination", A.linksMeta, loadLinkPage);
 }
 
-$("#linkSearch").oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadLinkPage(1).catch((e) => toast(e.message)), 180); };
+$("#linkSearch").oninput = renderLinks;
 $("#linksTable").onclick = (event) => {
   const button = event.target.closest("[data-act]");
   if (!button) return;
@@ -271,34 +256,76 @@ async function deleteLink(item) {
 }
 
 function qrModal(item) {
-  const target = `${location.origin}/${item.code}`;
-  openModal("短链接二维码", `
+  openModal(
+    "短链接二维码",
+    `
     <div style="text-align:center">
-      <div class="qr-box"><div id="qrCanvas" aria-label="短链接二维码"></div></div>
+      <div class="qr-box">
+        <canvas id="qrCanvas"></canvas>
+      </div>
       <strong>/${esc(item.code)}</strong>
-      <p style="color:var(--muted);word-break:break-all">${esc(target)}</p>
-      <button class="btn primary" id="downloadQr">下载二维码</button>
-    </div>`);
+      <p style="color:var(--muted);word-break:break-all">
+        ${esc(location.origin + "/" + item.code)}
+      </p>
+      <button class="btn primary" id="downloadQr">
+        下载二维码
+      </button>
+    </div>
+    `
+  );
+
   setTimeout(() => {
-    const container = $("#qrCanvas");
-    if (!container || typeof QRCode === "undefined") return toast("二维码库未加载");
-    try {
-      new QRCode(container, { text: target, width: 220, height: 220, colorDark: "#111111", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
-      $("#downloadQr").onclick = () => {
-        const image = container.querySelector("img");
-        if (image?.src) { const link = document.createElement("a"); link.href = image.src; link.download = `${item.code}-qrcode.png`; link.click(); return; }
-        const canvas = container.querySelector("canvas");
-        if (canvas) { const link = document.createElement("a"); link.href = canvas.toDataURL("image/png"); link.download = `${item.code}-qrcode.png`; link.click(); }
+    const canvas = document.getElementById("qrCanvas");
+
+    if (!canvas) {
+      toast("二维码容器不存在");
+      return;
+    }
+
+    if (typeof QRCode === "undefined") {
+      toast("二维码库未加载");
+      return;
+    }
+
+    QRCode.toCanvas(
+      canvas,
+      `${location.origin}/${item.code}`,
+      {
+        width:220,
+        margin:1
+      },
+      (error)=>{
+        if(error){
+          console.error("QRCode error:", error);
+          toast("二维码生成失败");
+        }
+      }
+    );
+
+    const btn = document.getElementById("downloadQr");
+
+    if(btn){
+      btn.onclick = ()=>{
+        const link=document.createElement("a");
+        link.href=canvas.toDataURL("image/png");
+        link.download=`${item.code}-qrcode.png`;
+        link.click();
       };
-    } catch (error) { console.error(error); toast("二维码生成失败"); }
-  }, 0);
+    }
+
+  },100);
 }
 
 $("#addLinkBtn").onclick = () => linkModal();
 $("#addNavBtn").onclick = () => navModal();
 
 function iconUrl(url) {
-  try { return `/api/favicon?url=${encodeURIComponent(new URL(url).origin)}`; } catch { return ""; }
+  try {
+    const host = new URL(url).hostname;
+    return `https://icons.duckduckgo.com/ip3/${host}.ico`;
+  } catch {
+    return "";
+  }
 }
 
 function fallbackIcon(item) {
@@ -309,65 +336,48 @@ function fallbackIcon(item) {
   return icons[hash % icons.length];
 }
 
-function navIcon(item) { return item.icon || item.favicon_url || iconUrl(item.link_url || item.url); }
+function navIcon(item) { return item.icon || iconUrl(item.url); }
 
-function navFilteredItems() { return Array.isArray(A.nav) ? A.nav : []; }
-function currentNavFilterPayload() {
-  return {
-    q: $("#navSearch")?.value.trim() || "",
-    category: $("#navCategoryFilter")?.value || "",
-  };
+function navFilteredItems() {
+  const query = String($("#navSearch")?.value || "").trim().toLowerCase();
+  const category = String($("#navCategoryFilter")?.value || "");
+  return A.nav.filter((item) => {
+    const haystack = [item.title, item.url, item.description, item.category].join(" ").toLowerCase();
+    return (!query || haystack.includes(query)) && (!category || (item.category || "未分类") === category);
+  });
 }
 
 function refreshNavFilters() {
   const select = $("#navCategoryFilter");
   if (!select) return;
   const current = select.value;
-  const categories = A.navCategories || [];
+  const categories = [...new Set(A.nav.map((item) => item.category || "未分类"))].sort((a, b) => a.localeCompare(b, "zh-CN"));
   select.innerHTML = '<option value="">全部分类</option>' + categories.map((category) => `<option value="${esc(category)}">${esc(category)}</option>`).join("");
   select.value = categories.includes(current) ? current : "";
-}
-
-function renderPagination(id, meta, loader) {
-  const root = $("#" + id);
-  if (!root) return;
-  const page = Number(meta.page || 1), totalPages = Number(meta.totalPages || 1), total = Number(meta.total || 0);
-  root.innerHTML = `<span>第 ${page} / ${totalPages} 页 · 共 ${total} 项</span><div><button class="small-btn" data-page="prev" ${page <= 1 ? "disabled" : ""}>上一页</button><button class="small-btn" data-page="next" ${page >= totalPages ? "disabled" : ""}>下一页</button></div>`;
-  root.onclick = (event) => {
-    const button = event.target.closest("[data-page]");
-    if (!button || button.disabled) return;
-    loader(button.dataset.page === "prev" ? page - 1 : page + 1).catch((error) => toast(error.message));
-  };
 }
 
 function renderNav() {
   refreshNavFilters();
   const element = $("#navAdminGrid");
   const items = navFilteredItems();
-  const meta = A.navMeta;
-  $("#navCount").innerHTML = `${meta.total || items.length} 项`;
-  $("#navFilterHint").classList.remove("hidden");
-  $("#navFilterHint").textContent = "分页模式下使用 ↑ / ↓ 调整全局顺序，无需保存。";
-  $("#saveNavOrder").disabled = true;
-  $("#saveNavOrder").title = "分页模式使用卡片上的 ↑ / ↓ 直接保存";
-  const selectedCount = A.navSelectionAll ? Number(meta.total || 0) : A.navSelected.size;
-  $("#navSelectedCount").textContent = selectedCount ? `已选择 ${selectedCount} 项` : "未选择";
-  ["enableSelectedNav", "disableSelectedNav", "deleteSelectedNav", "clearSelectedNav"].forEach((id) => {
-    const button = $("#" + id);
-    if (button) button.disabled = selectedCount === 0;
-  });
+  const filtered = items.length !== A.nav.length;
+  $("#navCount").innerHTML = (filtered ? `${items.length} / ${A.nav.length} 项` : `${A.nav.length} 项`) + (A.navDirty ? '<span class="nav-dirty">未保存</span>' : '');
+  $("#navFilterHint").classList.toggle("hidden", !filtered);
   element.innerHTML = items.map((item) => `
-    <div class="admin-nav-card ${A.navSelected.has(Number(item.id)) ? "selected" : ""}" data-id="${item.id}">
+    <div class="admin-nav-card ${A.navSelected.has(item.id) ? "selected" : ""}" draggable="true" data-id="${item.id}">
       <div class="admin-nav-head">
-        <div class="admin-nav-selection"><input type="checkbox" data-navact="select" data-id="${item.id}" ${A.navSelected.has(Number(item.id)) ? "checked" : ""} aria-label="选择 ${esc(item.title)}"><div class="admin-icon-wrap">
-          <img class="site-icon" src="${esc(navIcon(item))}" alt="" loading="lazy" decoding="async">
+        <div class="admin-nav-selection"><input type="checkbox" data-navact="select" data-id="${item.id}" ${A.navSelected.has(item.id) ? "checked" : ""} aria-label="选择 ${esc(item.title)}"><div class="admin-icon-wrap">
+          <img class="site-icon" src="${esc(navIcon(item))}" alt="" onerror="this.outerHTML='<span class=&quot;site-icon site-icon-fallback&quot;>${esc(fallbackIcon(item))}</span>'">
         </div></div>
         <div class="admin-nav-title"><strong>${esc(item.title)}</strong><small>${esc(item.category || "未分类")}</small></div>
-        <span class="drag-handle">#${Number(item.sort_order ?? 0) + 1}</span>
+        <span class="drag-handle">⠿</span>
       </div>
       <p>${esc(item.description || item.url)}</p>
       <div class="nav-admin-meta">
-        <div class="nav-admin-badges">${item.link_id ? '<span class="linked-badge">短链接</span>' : '<span class="manual-badge">手动</span>'}<span class="nav-order-badge">#${Number(item.sort_order ?? 0) + 1}</span></div>
+        <div class="nav-admin-badges">
+          ${item.link_id ? '<span class="linked-badge">短链接</span>' : '<span class="manual-badge">手动</span>'}
+          <span class="nav-order-badge">#${Number(item.sort_order ?? 0) + 1}</span>
+        </div>
         <span class="nav-url" title="${esc(item.url)}">${esc(item.url)}</span>
       </div>
       <div class="row-actions nav-admin-actions">
@@ -377,13 +387,27 @@ function renderNav() {
         <button class="small-btn" data-navact="edit" data-id="${item.id}">编辑</button>
         <button class="small-btn danger-btn" data-navact="del" data-id="${item.id}">删除</button>
       </div>
-    </div>`).join("") || '<div class="panel" style="padding:30px">暂无导航</div>';
-  element.querySelectorAll("img.site-icon").forEach((img) => img.addEventListener("error", () => {
-    const item = A.nav.find((value) => Number(value.id) === Number(img.closest("[data-id]")?.dataset.id));
-    if (!item) return;
-    const span = document.createElement("span"); span.className = "site-icon site-icon-fallback"; span.textContent = fallbackIcon(item); img.replaceWith(span);
-  }, { once: true }));
-  renderPagination("navPagination", A.navMeta, loadNavPage);
+    </div>
+  `).join("") || '<div class="panel" style="padding:30px">暂无导航</div>';
+  bindDrag();
+}
+
+function bindDrag() {
+  let dragging = null;
+  const isFiltered = !!($("#navSearch")?.value || $("#navCategoryFilter")?.value);
+  document.querySelectorAll(".admin-nav-card").forEach((card) => {
+    card.ondragstart = (event) => {
+      if (isFiltered) { event.preventDefault(); return; }
+      dragging = card; card.classList.add("dragging");
+    };
+    card.ondragend = () => { card.classList.remove("dragging"); dragging = null; };
+    card.ondragover = (event) => {
+      event.preventDefault();
+      if (!dragging || dragging === card) return;
+      const rect = card.getBoundingClientRect();
+      card.parentNode.insertBefore(dragging, event.clientY > rect.top + rect.height / 2 ? card.nextSibling : card);
+    };
+  });
 }
 
 async function copyText(text) {
@@ -411,86 +435,63 @@ $("#navAdminGrid").onclick = async (event) => {
   if (button.dataset.navact === "select") {
     const id = Number(button.dataset.id);
     if (button.checked) A.navSelected.add(id); else A.navSelected.delete(id);
-    A.navSelectionAll = false;
     renderNav();
     return;
   }
-  const item = A.nav.find((value) => Number(value.id) === Number(button.dataset.id));
+  const item = A.nav.find((value) => value.id == button.dataset.id);
   if (!item) return;
   if (button.dataset.navact === "edit") navModal(item);
   if (button.dataset.navact === "del") deleteNav(item);
   if (button.dataset.navact === "copy") toast(await copyText(item.url) ? "链接已复制" : "复制失败");
   if (button.dataset.navact === "up" || button.dataset.navact === "down") {
-    button.disabled = true;
-    try { await api("/api/admin/navigation/move", { method: "POST", body: JSON.stringify({ id: Number(item.id), direction: button.dataset.navact }) }); await loadNavPage(A.navMeta.page); }
-    catch (error) { toast(error.message); } finally { button.disabled = false; }
+    const currentIndex = A.nav.findIndex((value) => Number(value.id) === Number(item.id));
+    const targetIndex = currentIndex + (button.dataset.navact === "up" ? -1 : 1);
+    if (currentIndex >= 0 && targetIndex >= 0 && targetIndex < A.nav.length) {
+      [A.nav[currentIndex], A.nav[targetIndex]] = [A.nav[targetIndex], A.nav[currentIndex]];
+      A.nav.forEach((value, index) => { value.sort_order = index; });
+      A.navDirty = true;
+      renderNav();
+      toast("顺序已调整，点击“保存排序”后生效");
+    }
   }
 };
 
-$("#navSearch").oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadNavPage(1).catch((e) => toast(e.message)), 180); };
-$("#navCategoryFilter").onchange = () => loadNavPage(1).catch((e) => toast(e.message));
-$("#clearNavFilter").onclick = () => { $("#navSearch").value = ""; $("#navCategoryFilter").value = ""; loadNavPage(1).catch((e) => toast(e.message)); };
+$("#navSearch").oninput = renderNav;
+$("#navCategoryFilter").onchange = renderNav;
+$("#clearNavFilter").onclick = () => {
+  $("#navSearch").value = "";
+  $("#navCategoryFilter").value = "";
+  renderNav();
+};
 
-$("#saveNavOrder").onclick = () => toast("分页模式下，使用卡片上的 ↑ / ↓ 直接保存顺序");
+$("#saveNavOrder").onclick = async () => {
+  const ids = [...document.querySelectorAll(".admin-nav-card")].map((node) => Number(node.dataset.id));
+  try { await api("/api/admin/navigation/reorder", { method: "POST", body: JSON.stringify({ ids }) }); A.navDirty = false; toast("排序已保存"); await loadAll(); }
+  catch (error) { toast(error.message); }
+};
 
-async function updateSelectedNav(enabled, all = false) {
-  const useAll = all || A.navSelectionAll;
-  const ids = A.nav.filter((item) => A.navSelected.has(Number(item.id))).map((item) => Number(item.id));
-  if (!useAll && !ids.length) return toast("请先选择导航项目");
-  const payload = useAll ? { ...currentNavFilterPayload(), all: true, action: enabled ? "enable" : "disable" } : { ids, action: enabled ? "enable" : "disable" };
+async function updateSelectedNav(enabled) {
+  const selected = A.nav.filter((item) => A.navSelected.has(Number(item.id)));
+  if (!selected.length) return toast("请先选择导航项目");
   try {
-    const data = await api("/api/admin/navigation/bulk", { method: "POST", body: JSON.stringify(payload) });
-    toast(enabled ? `已启用 ${data.count || 0} 项` : `已停用 ${data.count || 0} 项`);
-    A.navSelected.clear();
-    A.navSelectionAll = false;
-    await loadNavPage(A.navMeta.page);
+    await Promise.all(selected.map((item) => api(`/api/admin/navigation/${item.id}`, { method: "PUT", body: JSON.stringify({ title: item.title, category: item.category || "", url: item.url, description: item.description || "", icon: item.icon || "", enabled }) })));
+    toast(enabled ? `已启用 ${selected.length} 项` : `已停用 ${selected.length} 项`);
+    await loadAll();
   } catch (error) { toast(error.message); }
 }
 
-$("#selectAllNav").onclick = () => {
-  A.navSelectionAll = false;
-  navFilteredItems().forEach((item) => A.navSelected.add(Number(item.id)));
-  renderNav();
-};
-$("#selectAllNavResults").onclick = async () => {
-  try {
-    const filter = currentNavFilterPayload();
-    const data = await api(`/api/admin/navigation?page=1&pageSize=100&q=${encodeURIComponent(filter.q)}&category=${encodeURIComponent(filter.category)}`);
-    // Fetch all matching IDs without changing the current page.
-    const pages = Math.ceil(Number(data.total || 0) / 100);
-    A.navSelected.clear();
-    A.navSelectionAll = Number(data.total || 0) > 0;
-    for (let page = 1; page <= pages; page++) {
-      const pageData = page === 1 ? data : await api(`/api/admin/navigation?page=${page}&pageSize=100&q=${encodeURIComponent(filter.q)}&category=${encodeURIComponent(filter.category)}`);
-      (pageData.items || []).forEach((item) => A.navSelected.add(Number(item.id)));
-    }
-    renderNav();
-    toast(`已选择全部 ${A.navSelected.size} 项`);
-  } catch (error) { toast(error.message); }
-};
-$("#clearSelectedNav").onclick = () => { A.navSelected.clear(); A.navSelectionAll = false; renderNav(); };
+$("#selectAllNav").onclick = () => { navFilteredItems().forEach((item) => A.navSelected.add(Number(item.id))); renderNav(); };
+$("#clearSelectedNav").onclick = () => { A.navSelected.clear(); renderNav(); };
 $("#enableSelectedNav").onclick = () => updateSelectedNav(true);
 $("#disableSelectedNav").onclick = () => updateSelectedNav(false);
-$("#enableAllNav").onclick = () => updateSelectedNav(true, true);
-$("#disableAllNav").onclick = () => updateSelectedNav(false, true);
 $("#deleteSelectedNav").onclick = async () => {
-  const ids = A.nav.filter((item) => A.navSelected.has(Number(item.id))).map((item) => Number(item.id));
-  if (!ids.length) return toast("请先选择导航项目");
-  if (!confirm(`确定删除选中的 ${ids.length} 个导航项目吗？此操作不可撤销。`)) return;
+  const selected = A.nav.filter((item) => A.navSelected.has(Number(item.id)));
+  if (!selected.length) return toast("请先选择导航项目");
+  if (!confirm(`确定删除选中的 ${selected.length} 个导航项目吗？此操作不可撤销。`)) return;
   try {
-    const data = await api("/api/admin/navigation/bulk", { method: "POST", body: JSON.stringify({ ids, action: "delete" }) });
-    toast(`已删除 ${data.count || ids.length} 项`);
-    A.navSelected.clear();
-    A.navSelectionAll = false;
-    await loadNavPage(A.navMeta.page);
-  } catch (error) { toast(error.message); }
-};
-$("#normalizeNavOrder").onclick = async () => {
-  if (!confirm("将按当前全局顺序重新整理编号，确定继续吗？")) return;
-  try {
-    const data = await api("/api/admin/navigation/normalize", { method: "POST" });
-    toast(`排序已整理，共 ${data.count || 0} 项`);
-    await loadNavPage(A.navMeta.page);
+    await Promise.all(selected.map((item) => api(`/api/admin/navigation/${item.id}`, { method: "DELETE" })));
+    toast(`已删除 ${selected.length} 项`);
+    await loadAll();
   } catch (error) { toast(error.message); }
 };
 
@@ -560,54 +561,47 @@ function closeModal() { $("#modal").classList.add("hidden"); }
 document.querySelectorAll("[data-close-modal]").forEach((node) => node.onclick = closeModal);
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
 
-$("#exportLinks").onclick = async () => {
-  const q = ($( "#linkSearch")?.value || "").trim();
-  const button = $("#exportLinks");
-  const original = button.textContent;
-  button.disabled = true; button.textContent = "导出中…";
-  try {
-    const response = await fetch(`/api/admin/links/export?q=${encodeURIComponent(q)}`, { credentials: "same-origin" });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || "导出失败");
-    }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url; link.download = "shortlinks.csv";
-    document.body.appendChild(link); link.click(); link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast(q ? "当前搜索结果已完整导出" : "全部短链接已完整导出");
-  } catch (error) { toast(error.message); }
-  finally { button.disabled = false; button.textContent = original; }
+$("#exportLinks").onclick = () => {
+  const headers = ["code", "url", "title", "description", "category", "enabled"];
+  const csv = [headers.join(","), ...A.links.map((item) => headers.map((key) => `"${String(item[key] ?? "").replaceAll('"', '""')}"`).join(","))].join("\n");
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
+  link.download = "shortlinks.csv";
+  link.click();
+  URL.revokeObjectURL(link.href);
 };
 
 $("#importLinksBtn").onclick = () => $("#csvFile").click();
 $("#csvFile").onchange = async (event) => {
   const file = event.target.files[0];
   if (!file) return;
-  try {
-    if (file.size > 2 * 1024 * 1024) throw new Error("CSV 文件不能超过 2 MB");
-    const text = await file.text();
-    const lines = text.replace(/^\ufeff/, "").split(/\r?\n/).filter(Boolean);
-    if (lines.length < 2) throw new Error("CSV 没有数据");
-    if (lines.length - 1 > 1000) throw new Error("CSV 最多支持 1000 条记录");
-    const result = await fetch("/api/admin/links/import", {
-      method: "POST", credentials: "same-origin",
-      headers: { "Content-Type": "text/csv;charset=utf-8" }, body: text,
-    }).then(async (response) => {
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "导入失败");
-      return data;
-    });
-    toast(`导入完成：成功 ${result.success}，失败 ${result.failed}`);
-    if (result.failed) console.warn("CSV import errors", result.errors);
-    event.target.value = "";
-    await loadLinkPage(1);
-  } catch (error) {
-    toast(error.message);
-    event.target.value = "";
+  const text = await file.text();
+  const lines = text.replace(/^\ufeff/, "").split(/\r?\n/).filter(Boolean);
+  if (lines.length < 2) { toast("CSV 没有数据"); return; }
+  const parseCsvLine = (line) => {
+    const values = [];
+    let current = "", quoted = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"' && line[i + 1] === '"') { current += '"'; i++; }
+      else if (char === '"') quoted = !quoted;
+      else if (char === "," && !quoted) { values.push(current); current = ""; }
+      else current += char;
+    }
+    values.push(current);
+    return values;
+  };
+  const headers = parseCsvLine(lines[0]).map((x) => x.trim());
+  let success = 0;
+  for (const line of lines.slice(1)) {
+    const values = parseCsvLine(line), data = {};
+    headers.forEach((key, index) => data[key] = values[index] || "");
+    data.enabled = data.enabled !== "false";
+    try { await api("/api/admin/links", { method: "POST", body: JSON.stringify(data) }); success++; } catch {}
   }
+  toast(`导入完成：${success} 条`);
+  event.target.value = "";
+  await loadAll();
 };
 
 function toggleAdminTheme() {

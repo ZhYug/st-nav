@@ -1,6 +1,5 @@
 
-const VERSION = "1.2.2";
-const getVersion = (env) => String(env.ST_NAV_VERSION || VERSION);
+const VERSION = "1.0.5";
 const SESSION_COOKIE = "__Host-stnav_session";
 const SESSION_TTL = 86400;
 const PUBLIC_CACHE_CONTROL = "public, max-age=0, s-maxage=30, stale-while-revalidate=60";
@@ -15,13 +14,13 @@ async function ensureDatabase(env) {
   let promise = databaseReady.get(env);
   if (!promise) {
     promise = (async () => {
-      const requiredTables = ["links", "link_daily_stats", "navigation", "settings", "admin_sessions"];
+      const requiredTables = ["links", "link_daily_stats", "navigation", "settings"];
       const result = await env.DB
         .prepare(`
           SELECT name
           FROM sqlite_master
           WHERE type = 'table'
-            AND name IN (?, ?, ?, ?, ?)
+            AND name IN (?, ?, ?, ?)
         `)
         .bind(...requiredTables)
         .all();
@@ -56,7 +55,6 @@ const SECURITY_HEADERS = {
   "referrer-policy": "strict-origin-when-cross-origin",
   "permissions-policy": "camera=(), microphone=(), geolocation=()",
   "x-frame-options": "DENY",
-  "content-security-policy": "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';",
 };
 
 const json = (data, status = 200, headers = {}) =>
@@ -113,18 +111,6 @@ function clean(value, max = 2000) {
   return String(value ?? "").trim().slice(0, max);
 }
 
-function validateSetting(key, value) {
-  const v = clean(value, 500);
-  if (["nav_columns_mobile", "nav_columns_tablet", "nav_columns_desktop", "nav_columns_wide"].includes(key)) {
-    const n = Number(v);
-    return Number.isInteger(n) && n >= 1 && n <= 6 ? String(n) : null;
-  }
-  if (key === "nav_tag_style") return ["pills", "tabs", "sections"].includes(v) ? v : null;
-  if (key === "accent") return /^#[0-9a-f]{6}$/i.test(v) ? v : null;
-  if (["nav_category_order", "nav_hidden_categories"].includes(key)) return v.slice(0, 1000);
-  return v;
-}
-
 function base64urlEncode(value) {
   return btoa(value)
     .replaceAll("+", "-")
@@ -157,10 +143,10 @@ async function hmac(secret, data) {
   return base64urlEncode(String.fromCharCode(...new Uint8Array(sig)));
 }
 
-async function sessionToken(secret, jti = crypto.randomUUID()) {
+async function sessionToken(secret) {
   const iat = Date.now();
-  const payload = base64urlEncode(JSON.stringify({ exp: iat + SESSION_TTL * 1000, iat, jti }));
-  return { token: `${payload}.${await hmac(secret, payload)}`, jti, exp: iat + SESSION_TTL * 1000 };
+  const payload = base64urlEncode(JSON.stringify({ exp: iat + SESSION_TTL * 1000, iat }));
+  return `${payload}.${await hmac(secret, payload)}`;
 }
 
 function getCookie(request, name) {
@@ -186,15 +172,15 @@ function sessionSecret(env) {
   return String(env.SESSION_SECRET || env.ADMIN_PASSWORD || "");
 }
 
-async function parseSession(request, env) {
+async function isAuthed(request, env) {
   const secret = sessionSecret(env);
-  if (!secret) return null;
+  if (!secret) return false;
   const token = getCookie(request, SESSION_COOKIE);
   const [payload, signature] = token.split(".");
-  if (!payload || !signature) return null;
+  if (!payload || !signature) return false;
   try {
     const data = JSON.parse(base64urlDecode(payload));
-    if (!data.exp || data.exp < Date.now() || !data.jti || !/^[0-9a-f-]{36}$/i.test(data.jti)) return null;
+    if (!data.exp || data.exp < Date.now()) return false;
     const signatureBytes = Uint8Array.from(
       atob(signature.replaceAll("-", "+").replaceAll("_", "/") + "===".slice((signature.length + 3) % 4)),
       (char) => char.charCodeAt(0)
@@ -203,23 +189,12 @@ async function parseSession(request, env) {
       "raw", new TextEncoder().encode(secret),
       { name: "HMAC", hash: "SHA-256" }, false, ["verify"]
     );
-    const valid = await crypto.subtle.verify(
+    return await crypto.subtle.verify(
       { name: "HMAC" }, key, signatureBytes, new TextEncoder().encode(payload)
     );
-    if (!valid) return null;
-    const session = await env.DB.prepare(
-      "SELECT jti,expires_at FROM admin_sessions WHERE jti=? AND revoked_at IS NULL LIMIT 1"
-    ).bind(data.jti).first();
-    if (!session || Date.parse(session.expires_at) < Date.now()) return null;
-    return data;
   } catch {
-    return null;
+    return false;
   }
-}
-
-async function isAuthed(request, env) {
-  if (!env.DB) return false;
-  return Boolean(await parseSession(request, env));
 }
 
 function sameOrigin(request) {
@@ -241,48 +216,14 @@ class RequestError extends Error {
 }
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
-const MAX_IMPORT_ROWS = 1000;
-const MAX_PAGE_SIZE = 100;
 
-async function textBody(request, maxBytes = MAX_JSON_BODY_BYTES) {
+async function body(request) {
   const length = Number(request.headers.get("content-length"));
-  if (Number.isFinite(length) && length > maxBytes) throw new RequestError("请求体过大", 413);
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > maxBytes) throw new RequestError("请求体过大", 413);
-  return text;
-}
-
-function parseCsv(text) {
-  const rows = [];
-  let row = [], cell = "", quoted = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (quoted) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') { cell += '"'; i++; }
-        else quoted = false;
-      } else cell += ch;
-      continue;
-    }
-    if (ch === '"') quoted = true;
-    else if (ch === ',') { row.push(cell); cell = ""; }
-    else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ""; }
-    else if (ch !== '\r') cell += ch;
-  }
-  if (quoted) throw new RequestError("CSV 引号未闭合", 400);
-  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
-  return rows.filter((r) => r.some((v) => String(v).trim() !== ""));
-}
-
-function csvCell(value) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
-
-async function body(request, maxBytes = MAX_JSON_BODY_BYTES) {
-  const length = Number(request.headers.get("content-length"));
-  if (Number.isFinite(length) && length > maxBytes) {
+  if (Number.isFinite(length) && length > MAX_JSON_BODY_BYTES) {
     throw new RequestError("请求体过大", 413);
   }
   const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+  if (new TextEncoder().encode(text).byteLength > MAX_JSON_BODY_BYTES) {
     throw new RequestError("请求体过大", 413);
   }
   if (!text.trim()) return {};
@@ -346,7 +287,7 @@ async function getPublicBootstrap(env) {
     env.DB.prepare(
       `SELECT navigation.id,navigation.title,navigation.description,navigation.url,
               navigation.icon,navigation.category,navigation.sort_order,navigation.enabled,
-              navigation.link_id,links.code,links.url AS link_url
+              navigation.link_id,links.code
        FROM navigation
        LEFT JOIN links ON navigation.link_id = links.id
        WHERE navigation.enabled=1
@@ -357,10 +298,7 @@ async function getPublicBootstrap(env) {
   ]);
 
   return {
-    items: results[0].results.map((item) => ({
-      ...item,
-      favicon_url: `/api/favicon?url=${encodeURIComponent(item.link_url || item.url)}`,
-    })),
+    items: results[0].results,
     settings: Object.fromEntries(results[1].results.map((x) => [x.key, x.value])),
   };
 }
@@ -437,70 +375,18 @@ function recordLoginFailure(request) {
 }
 function clearLoginFailures(request) { loginAttempts.delete(clientKey(request)); }
 
-
-function pagination(url, defaults = {}) {
-  const page = Math.max(1, Number.parseInt(url.searchParams.get("page") || defaults.page || "1", 10) || 1);
-  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(10, Number.parseInt(url.searchParams.get("pageSize") || defaults.pageSize || "50", 10) || 50));
-  return { page, pageSize, offset: (page - 1) * pageSize };
-}
-
-function faviconTarget(value) {
-  try {
-    const url = new URL(String(value));
-    if (!/^https?:$/.test(url.protocol) || url.username || url.password || url.port) return null;
-    const host = url.hostname.toLowerCase();
-    if (!host || host === "localhost" || host.endsWith(".localhost") || host === "0.0.0.0" || host === "127.0.0.1" || host === "::1" || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) || host === "169.254.169.254") return null;
-    return new URL(`${url.protocol}//${host}/favicon.ico`);
-  } catch { return null; }
-}
-
-function faviconCacheKey(request, target) {
-  const url = new URL(request.url);
-  url.pathname = "/__stnav_favicon_cache";
-  url.search = `?url=${encodeURIComponent(target.origin)}`;
-  return new Request(url.toString(), { method: "GET" });
-}
-
-async function handleFavicon(request, env, ctx) {
-  const target = faviconTarget(new URL(request.url).searchParams.get("url"));
-  if (!target) return new Response("", { status: 400, headers: SECURITY_HEADERS });
-  if (!env.DB) return new Response("", { status: 503, headers: SECURITY_HEADERS });
-  const origin = target.origin;
-  const allowed = await env.DB.prepare(`SELECT EXISTS(
-    SELECT 1 FROM navigation WHERE url=? OR url LIKE ?
-  ) + EXISTS(
-    SELECT 1 FROM links WHERE url=? OR url LIKE ?
-  ) AS allowed`).bind(origin, `${origin}/%`, origin, `${origin}/%`).first();
-  if (!Number(allowed?.allowed || 0)) return new Response("", { status: 404, headers: SECURITY_HEADERS });
-  const key = faviconCacheKey(request, target);
-  if (typeof caches !== "undefined" && caches.default) {
-    const cached = await caches.default.match(key);
-    if (cached) return cached;
-  }
-  try {
-    const response = await fetch(target.toString(), { headers: { "User-Agent": "ST-Nav-Favicon/1.2.2" }, redirect: "manual" });
-    const contentType = response.headers.get("content-type") || "";
-    if (!response.ok || (!contentType.startsWith("image/") && !contentType.includes("icon"))) {
-      return new Response("", { status: 404, headers: SECURITY_HEADERS });
-    }
-    const headers = new Headers(SECURITY_HEADERS);
-    headers.set("content-type", contentType.split(";")[0] || "image/x-icon");
-    headers.set("cache-control", "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400");
-    const result = new Response(response.body, { status: 200, headers });
-    if (typeof caches !== "undefined" && caches.default) waitUntil(ctx, caches.default.put(key, result.clone()));
-    return result;
-  } catch {
-    return new Response("", { status: 404, headers: SECURITY_HEADERS });
-  }
-}
-
 async function handleApi(request, env, ctx, parts) {
   const method = request.method.toUpperCase();
   const path = "/" + parts.join("/");
 
   // Authentication and health checks do not require D1. This keeps failed-login
   // traffic away from the database and makes health probes cheap.
-  const needsDatabase = path !== "/api/health" && path !== "/api/favicon";
+  const needsDatabase = !(
+    path === "/api/auth/login" ||
+    path === "/api/auth/logout" ||
+    path === "/api/auth/me" ||
+    path === "/api/health"
+  );
   if (needsDatabase) await ensureDatabase(env);
 
   if (path === "/api/auth/login" && method === "POST") {
@@ -519,22 +405,17 @@ async function handleApi(request, env, ctx, parts) {
       return json({ error: "密码错误" }, 401);
     }
     clearLoginFailures(request);
-    await env.DB.prepare("DELETE FROM admin_sessions WHERE expires_at < ? OR revoked_at IS NOT NULL").bind(now()).run();
-    const session = await sessionToken(sessionSecret(env));
-    await env.DB.prepare(
-      "INSERT INTO admin_sessions(jti,created_at,expires_at) VALUES(?,?,?)"
-    ).bind(session.jti, now(), new Date(session.exp).toISOString()).run();
-    return json({ ok: true }, 200, { "Set-Cookie": cookie(SESSION_COOKIE, session.token) });
+    const token = await sessionToken(sessionSecret(env));
+    return json({ ok: true }, 200, { "Set-Cookie": cookie(SESSION_COOKIE, token) });
   }
 
   if (path === "/api/auth/logout" && method === "POST") {
     if (!sameOrigin(request)) return json({ error: "非法来源" }, 403);
-    const session = await parseSession(request, env);
-    if (session?.jti) {
-      await env.DB.prepare("UPDATE admin_sessions SET revoked_at=? WHERE jti=? AND revoked_at IS NULL")
-        .bind(now(), session.jti).run();
-    }
-    return json({ ok: true }, 200, { "Set-Cookie": cookie(SESSION_COOKIE, "", 0) });
+    return json(
+      { ok: true },
+      200,
+      { "Set-Cookie": cookie(SESSION_COOKIE, "", 0) }
+    );
   }
 
   if (path === "/api/auth/me" && method === "GET") {
@@ -542,11 +423,7 @@ async function handleApi(request, env, ctx, parts) {
   }
 
   if (path === "/api/health" && method === "GET") {
-    return json({ ok: true, version: getVersion(env) });
-  }
-
-  if (path === "/api/favicon" && method === "GET") {
-    return handleFavicon(request, env, ctx);
+    return json({ ok: true, version: VERSION, database: Boolean(env.DB), session_secret: Boolean(env.SESSION_SECRET) });
   }
 
   if (path === "/api/public/bootstrap" && method === "GET") {
@@ -590,10 +467,29 @@ async function handleApi(request, env, ctx, parts) {
        WHERE day>=?
        GROUP BY day
        ORDER BY day`).bind(start),
+      env.DB.prepare("SELECT * FROM links ORDER BY created_at DESC,id DESC"),
+      env.DB.prepare(`SELECT
+        navigation.id,navigation.title,navigation.description,navigation.url,navigation.icon,
+        navigation.category,navigation.sort_order,navigation.enabled,navigation.created_at,
+        navigation.updated_at,navigation.link_id,links.code,links.title AS link_title,
+        links.description AS link_description,links.category AS link_category,
+        links.enabled AS link_enabled
+       FROM navigation
+       LEFT JOIN links ON navigation.link_id = links.id
+       ORDER BY navigation.sort_order,navigation.id`),
       env.DB.prepare("SELECT key,value FROM settings"),
     ]);
 
     const origin = new URL(request.url).origin;
+    const links = results[3].results.map((item) => ({
+      ...item,
+      short_url: item.code ? `${origin}/${item.code}` : "",
+    }));
+    const nav = results[4].results.map((item) => ({
+      ...item,
+      short_url: item.code ? `${origin}/${item.code}` : "",
+      url: item.code ? `${origin}/${item.code}` : item.url,
+    }));
     const trendMap = new Map(results[2].results.map((row) => [row.day, Number(row.clicks) || 0]));
     const trend = [];
     for (let offset = 13; offset >= 0; offset--) {
@@ -605,7 +501,9 @@ async function handleApi(request, env, ctx, parts) {
 
     return json({
       dashboard: { stats: results[0].results[0], topLinks: results[1].results, trend },
-      settings: Object.fromEntries(results[3].results.map((x) => [x.key, x.value])),
+      links,
+      navigation: nav,
+      settings: Object.fromEntries(results[5].results.map((x) => [x.key, x.value])),
     });
   }
 
@@ -633,89 +531,17 @@ async function handleApi(request, env, ctx, parts) {
     return json({ stats, topLinks: top.results, trend: trendRows });
   }
 
-  if (path === "/api/admin/links/import" && method === "POST") {
-    const contentType = request.headers.get("content-type") || "";
-    let rows;
-    if (contentType.toLowerCase().includes("text/csv")) {
-      const text = (await textBody(request, 3 * 1024 * 1024)).replace(/^\ufeff/, "");
-      const parsed = parseCsv(text);
-      if (parsed.length < 2) return json({ error: "CSV 没有数据" }, 400);
-      if (parsed.length - 1 > MAX_IMPORT_ROWS) return json({ error: `导入记录最多 ${MAX_IMPORT_ROWS} 条` }, 400);
-      const headers = parsed[0].map((x) => String(x).trim().toLowerCase());
-      const allowed = new Set(["code", "url", "title", "description", "category", "enabled"]);
-      rows = parsed.slice(1).map((values) => {
-        const data = {};
-        headers.forEach((key, index) => { if (allowed.has(key)) data[key] = values[index] || ""; });
-        data.enabled = String(data.enabled ?? "true").trim().toLowerCase() !== "false";
-        return data;
-      });
-    } else {
-      const data = await body(request, 3 * 1024 * 1024);
-      rows = data.rows;
-    }
-    if (!Array.isArray(rows) || !rows.length || rows.length > MAX_IMPORT_ROWS) {
-      return json({ error: `导入记录必须为 1-${MAX_IMPORT_ROWS} 条` }, 400);
-    }
-    let success = 0;
-    const errors = [];
-    for (let index = 0; index < rows.length; index++) {
-      const row = rows[index] || {};
-      const url = clean(row.url, 2000);
-      if (!validUrl(url)) { errors.push({ row: index + 2, error: "URL 必须是 http/https" }); continue; }
-      let code = clean(row.code, 64);
-      const autoCode = !code;
-      if (!autoCode && (!CODE_RE.test(code) || RESERVED_CODES.has(code.toLowerCase()))) {
-        errors.push({ row: index + 2, error: "短码格式不合法或为保留字" }); continue;
-      }
-      const insert = () => env.DB.prepare(`INSERT INTO links(code,url,title,description,category,enabled,updated_at) VALUES(?,?,?,?,?,?,?)`)
-        .bind(code, url, clean(row.title, 200), clean(row.description, 500), clean(row.category, 80), row.enabled === false || String(row.enabled).toLowerCase() === "false" ? 0 : 1, now()).run();
-      let inserted = false;
-      for (let attempt = 0; attempt < (autoCode ? 5 : 1); attempt++) {
-        if (autoCode) code = randomCode();
-        try { await insert(); inserted = true; break; }
-        catch (error) {
-          if (String(error?.message || "").toLowerCase().includes("unique")) { if (autoCode) continue; break; }
-          throw error;
-        }
-      }
-      if (inserted) success++; else errors.push({ row: index + 2, error: "短码已存在或无法生成唯一短码" });
-    }
-    invalidatePublicCache(request, ctx);
-    return json({ ok: true, success, failed: errors.length, errors: errors.slice(0, 100) });
-  }
-
-  if (path === "/api/admin/links/export" && method === "GET") {
-    const urlObj = new URL(request.url);
-    const q = clean(urlObj.searchParams.get("q"), 120).toLowerCase();
-    const where = q ? "WHERE lower(code || ' ' || url || ' ' || COALESCE(title,'') || ' ' || COALESCE(category,'')) LIKE ?" : "";
-    const params = q ? [`%${q}%`] : [];
-    const rows = await env.DB.prepare(`SELECT code,url,title,description,category,enabled FROM links ${where} ORDER BY created_at DESC,id DESC`).bind(...params).all();
-    const headers = ["code", "url", "title", "description", "category", "enabled"];
-    const csv = [headers, ...rows.results.map((item) => headers.map((key) => item[key]))]
-      .map((row) => row.map(csvCell).join(",")).join("\r\n");
-    const responseHeaders = new Headers(SECURITY_HEADERS);
-    responseHeaders.set("content-type", "text/csv;charset=utf-8");
-    responseHeaders.set("content-disposition", 'attachment; filename="shortlinks.csv"');
-    responseHeaders.set("cache-control", "no-store");
-    return new Response("\ufeff" + csv + "\r\n", { status: 200, headers: responseHeaders });
-  }
-
   if (path === "/api/admin/links" && method === "GET") {
-    const urlObj = new URL(request.url);
-    const { page, pageSize, offset } = pagination(urlObj);
-    const q = clean(urlObj.searchParams.get("q"), 120).toLowerCase();
-    const like = `%${q}%`;
-    const where = q ? "WHERE lower(code || ' ' || url || ' ' || COALESCE(title,'') || ' ' || COALESCE(category,'')) LIKE ?" : "";
-    const params = q ? [like] : [];
-    const [count, rows] = await env.DB.batch([
-      env.DB.prepare(`SELECT COUNT(*) total FROM links ${where}`).bind(...params),
-      env.DB.prepare(`SELECT links.*, (SELECT id FROM navigation WHERE navigation.link_id=links.id LIMIT 1) navigation_id
-        FROM links ${where} ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?`).bind(...params, pageSize, offset),
-    ]);
-    const total = Number(count.results[0]?.total || 0);
+    const result = await env.DB.prepare(
+      "SELECT * FROM links ORDER BY created_at DESC,id DESC"
+    ).all();
     const origin = new URL(request.url).origin;
-    const items = rows.results.map((item) => ({ ...item, short_url: item.code ? `${origin}/${item.code}` : "" }));
-    return json({ items, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
+    const items = result.results.map((item) => ({
+      ...item,
+      short_url: item.code ? `${origin}/${item.code}` : "",
+    }));
+
+    return json({ items });
   }
 
   if (path === "/api/admin/links" && method === "POST") {
@@ -839,33 +665,30 @@ async function handleApi(request, env, ctx, parts) {
   }
 
   if (path === "/api/admin/navigation" && method === "GET") {
-    const urlObj = new URL(request.url);
-    const { page, pageSize, offset } = pagination(urlObj);
-    const q = clean(urlObj.searchParams.get("q"), 120).toLowerCase();
-    const category = clean(urlObj.searchParams.get("category"), 80);
-    const filters = [];
-    const params = [];
-    if (q) { filters.push("lower(navigation.title || ' ' || COALESCE(navigation.description,'') || ' ' || COALESCE(navigation.category,'') || ' ' || navigation.url || ' ' || COALESCE(links.url,'')) LIKE ?"); params.push(`%${q}%`); }
-    if (category) { filters.push("COALESCE(navigation.category,'未分类') = ?"); params.push(category); }
-    const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
-    const [count, rows, categories] = await env.DB.batch([
-      env.DB.prepare(`SELECT COUNT(*) total FROM navigation LEFT JOIN links ON navigation.link_id=links.id ${where}`).bind(...params),
-      env.DB.prepare(`SELECT navigation.id,navigation.title,navigation.description,navigation.url,navigation.icon,navigation.category,
-        navigation.sort_order,navigation.enabled,navigation.created_at,navigation.updated_at,navigation.link_id,
-        links.code,links.url AS link_url,links.title AS link_title,links.description AS link_description,links.category AS link_category,links.enabled AS link_enabled
-        FROM navigation LEFT JOIN links ON navigation.link_id=links.id ${where}
-        ORDER BY navigation.sort_order,navigation.id LIMIT ? OFFSET ?`).bind(...params, pageSize, offset),
-      env.DB.prepare("SELECT DISTINCT COALESCE(category,'未分类') category FROM navigation ORDER BY category"),
-    ]);
-    const total = Number(count.results[0]?.total || 0);
+    const result = await env.DB.prepare(
+      `SELECT
+        navigation.id,navigation.title,navigation.description,navigation.url,navigation.icon,
+        navigation.category,navigation.sort_order,navigation.enabled,navigation.created_at,
+        navigation.updated_at,navigation.link_id,
+        links.code,
+        links.title AS link_title,
+        links.description AS link_description,
+        links.category AS link_category,
+        links.enabled AS link_enabled
+       FROM navigation
+       LEFT JOIN links ON navigation.link_id = links.id
+       ORDER BY navigation.sort_order,navigation.id`
+    ).all();
     const origin = new URL(request.url).origin;
-    const items = rows.results.map((item) => ({
+    const items = result.results.map((item) => ({
       ...item,
       short_url: item.code ? `${origin}/${item.code}` : "",
+      // 对关联短链接的导航，url 是实际可点击的短链接地址；
+      // 手动导航则保留数据库中的目标 URL。
       url: item.code ? `${origin}/${item.code}` : item.url,
-      favicon_url: `/api/favicon?url=${encodeURIComponent(item.link_url || item.url)}`,
     }));
-    return json({ items, categories: categories.results.map((row) => row.category).filter(Boolean), page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
+
+    return json({ items });
   }
 
   if (path === "/api/admin/navigation" && method === "POST") {
@@ -897,7 +720,10 @@ async function handleApi(request, env, ctx, parts) {
       const requestUrl = new URL(request.url);
       const shortUrl = requestUrl.origin + "/" + link.code;
 
-      const icon = "";
+      const icon =
+        "https://icons.duckduckgo.com/ip3/" +
+        encodeURIComponent(new URL(link.url).hostname) +
+        ".ico";
 
       await env.DB.prepare(
         `INSERT INTO navigation
@@ -929,9 +755,6 @@ async function handleApi(request, env, ctx, parts) {
       return json({ error: "标题和有效 URL 必填" }, 400);
     }
 
-    const icon = clean(data.icon, 1000);
-    if (icon && !validUrl(icon)) return json({ error: "图标 URL 必须是 http/https" }, 400);
-
     await env.DB.prepare(
       `INSERT INTO navigation
        (title,description,url,icon,category,sort_order,enabled,updated_at)
@@ -942,7 +765,7 @@ async function handleApi(request, env, ctx, parts) {
         title,
         clean(data.description, 500),
         url,
-        icon,
+        clean(data.icon, 1000),
         clean(data.category, 80),
         data.enabled === false ? 0 : 1,
         now()
@@ -951,76 +774,6 @@ async function handleApi(request, env, ctx, parts) {
 
     invalidatePublicCache(request, ctx);
     return json({ ok: true });
-  }
-
-  if (path === "/api/admin/navigation/bulk" && method === "POST") {
-    const data = await body(request);
-    const action = data.action;
-    if (!['enable', 'disable', 'delete'].includes(action)) return json({ error: "批量操作无效" }, 400);
-    const all = data.all === true;
-    let ids = [];
-    if (all) {
-      const q = clean(data.q, 120).toLowerCase();
-      const category = clean(data.category, 80);
-      const filters = [];
-      const params = [];
-      if (q) { filters.push("lower(navigation.title || ' ' || COALESCE(navigation.description,'') || ' ' || COALESCE(navigation.category,'') || ' ' || navigation.url || ' ' || COALESCE(links.url,'')) LIKE ?"); params.push(`%${q}%`); }
-      if (category) { filters.push("COALESCE(navigation.category,'未分类') = ?"); params.push(category); }
-      const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
-      const rows = await env.DB.prepare(`SELECT navigation.id FROM navigation LEFT JOIN links ON navigation.link_id=links.id ${where}`).bind(...params).all();
-      ids = rows.results.map((row) => Number(row.id));
-      if (!ids.length) return json({ ok: true, count: 0 });
-    } else {
-      if (!Array.isArray(data.ids) || data.ids.length < 1 || data.ids.length > 500) return json({ error: "请选择 1-500 个导航项目" }, 400);
-      ids = data.ids.map(Number);
-      if (ids.some((id) => !Number.isInteger(id) || id <= 0) || new Set(ids).size !== ids.length) return json({ error: "导航 ID 列表无效" }, 400);
-    }
-    if (ids.length > 500) {
-      // Avoid oversized SQL variable lists by operating in chunks.
-      for (let offset = 0; offset < ids.length; offset += 500) {
-        const chunk = ids.slice(offset, offset + 500), placeholders = chunk.map(() => '?').join(',');
-        if (action === 'delete') await env.DB.prepare(`DELETE FROM navigation WHERE id IN (${placeholders})`).bind(...chunk).run();
-        else await env.DB.prepare(`UPDATE navigation SET enabled=?,updated_at=? WHERE id IN (${placeholders})`).bind(action === 'enable' ? 1 : 0, now(), ...chunk).run();
-      }
-    } else {
-      const placeholders = ids.map(() => '?').join(',');
-      const existing = await env.DB.prepare(`SELECT id FROM navigation WHERE id IN (${placeholders})`).bind(...ids).all();
-      if (existing.results.length !== ids.length) return json({ error: "部分导航项目不存在，请刷新后重试" }, 409);
-      if (action === 'delete') await env.DB.prepare(`DELETE FROM navigation WHERE id IN (${placeholders})`).bind(...ids).run();
-      else await env.DB.prepare(`UPDATE navigation SET enabled=?,updated_at=? WHERE id IN (${placeholders})`).bind(action === 'enable' ? 1 : 0, now(), ...ids).run();
-    }
-    invalidatePublicCache(request, ctx);
-    return json({ ok: true, count: ids.length });
-  }
-
-  if (path === "/api/admin/navigation/normalize" && method === "POST") {
-    const rows = await env.DB.prepare("SELECT id FROM navigation ORDER BY sort_order,id").all();
-    const statements = rows.results.map((row, index) => env.DB.prepare("UPDATE navigation SET sort_order=?,updated_at=? WHERE id=?").bind(index, now(), row.id));
-    if (statements.length) await env.DB.batch(statements);
-    invalidatePublicCache(request, ctx);
-    return json({ ok: true, count: statements.length });
-  }
-
-  if (path === "/api/admin/navigation/move" && method === "POST") {
-    const data = await body(request);
-    const id = Number(data.id);
-    const direction = data.direction === "up" ? "up" : data.direction === "down" ? "down" : "";
-    if (!Number.isInteger(id) || id <= 0 || !direction) return json({ error: "移动参数无效" }, 400);
-    const current = await env.DB.prepare("SELECT id,sort_order FROM navigation WHERE id=?").bind(id).first();
-    if (!current) return json({ error: "导航不存在" }, 404);
-    const neighbor = await env.DB.prepare(
-      direction === "up"
-        ? "SELECT id,sort_order FROM navigation WHERE sort_order < ? ORDER BY sort_order DESC,id DESC LIMIT 1"
-        : "SELECT id,sort_order FROM navigation WHERE sort_order > ? ORDER BY sort_order ASC,id ASC LIMIT 1"
-    ).bind(current.sort_order).first();
-    if (!neighbor) return json({ ok: true, moved: false });
-    const timestamp = now();
-    await env.DB.batch([
-      env.DB.prepare("UPDATE navigation SET sort_order=?,updated_at=? WHERE id=?").bind(neighbor.sort_order, timestamp, current.id),
-      env.DB.prepare("UPDATE navigation SET sort_order=?,updated_at=? WHERE id=?").bind(current.sort_order, timestamp, neighbor.id),
-    ]);
-    invalidatePublicCache(request, ctx);
-    return json({ ok: true, moved: true });
   }
 
   if (path === "/api/admin/navigation/reorder" && method === "POST") {
@@ -1065,9 +818,7 @@ async function handleApi(request, env, ctx, parts) {
 
       const title = clean(data.title, 120);
       const url = clean(data.url, 2000);
-      const icon = clean(data.icon, 1000);
       if (!title || !validUrl(url)) return json({ error: "标题和有效 URL 必填" }, 400);
-      if (icon && !validUrl(icon)) return json({ error: "图标 URL 必须是 http/https" }, 400);
 
       const result = await env.DB.prepare(
         `UPDATE navigation SET title=?,description=?,url=?,icon=?,category=?,enabled=?,updated_at=?
@@ -1077,7 +828,7 @@ async function handleApi(request, env, ctx, parts) {
           title,
           clean(data.description, 500),
           url,
-          icon,
+          clean(data.icon, 1000),
           clean(data.category, 80),
           data.enabled === false ? 0 : 1,
           now(),
@@ -1109,16 +860,15 @@ async function handleApi(request, env, ctx, parts) {
 
   if (path === "/api/admin/settings" && method === "PUT") {
     const data = await body(request);
-    const statements = [];
-    for (const key of ALLOWED_SETTINGS) {
-      if (!(key in data)) continue;
-      const value = validateSetting(key, data[key]);
-      if (value === null) return json({ error: `设置 ${key} 的值无效` }, 400);
-      statements.push(env.DB.prepare(
-        `INSERT INTO settings(key,value) VALUES(?,?)
-         ON CONFLICT(key) DO UPDATE SET value=excluded.value`
-      ).bind(key, value));
-    }
+    const statements = ALLOWED_SETTINGS
+      .filter((key) => key in data)
+      .map((key) =>
+        env.DB.prepare(
+          `INSERT INTO settings(key,value) VALUES(?,?)
+           ON CONFLICT(key) DO UPDATE SET value=excluded.value`
+        ).bind(key, clean(data[key], 500))
+      );
+
     if (statements.length) await env.DB.batch(statements);
     invalidatePublicCache(request, ctx);
     return json({ ok: true });
@@ -1202,7 +952,6 @@ export default {
       const assetResponse = await env.ASSETS.fetch(request);
       const headers = new Headers(assetResponse.headers);
       Object.entries(SECURITY_HEADERS).forEach(([key, value]) => headers.set(key, value));
-      if (url.pathname === "/admin.html") headers.set("cache-control", "no-store");
       return new Response(assetResponse.body, { status: assetResponse.status, statusText: assetResponse.statusText, headers });
     } catch (error) {
       if (error instanceof RequestError) {

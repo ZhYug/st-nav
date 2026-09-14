@@ -28,7 +28,11 @@ function scheduleRender() {
 }
 
 function iconUrl(url) {
-  try { return `/api/favicon?url=${encodeURIComponent(new URL(url).origin)}`; } catch { return ""; }
+  try {
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(new URL(url).hostname)}&sz=128`;
+  } catch {
+    return "";
+  }
 }
 
 function fallbackIcon(item) {
@@ -140,13 +144,13 @@ function filtered() {
 function cardHtml(item, index) {
   const displayUrl = item.code ? location.origin + "/" + item.code : item.url;
   const favorite = state.favorites.includes(item.id);
-  const icon = item.icon || item.favicon_url || iconUrl(item.url);
+  const icon = item.icon || iconUrl(item.url);
   let fallback = fallbackIcon(item);
   try { fallback = fallbackIcon(item) || (item.title || new URL(item.url).hostname || "?")[0].toUpperCase(); } catch {}
   return `<article class="nav-card" style="animation:fadeUp .28s ease ${Math.min(index, 10) * 0.035}s both" data-id="${item.id}">
     <div class="nav-top">
       <a class="nav-card-open" href="${esc(displayUrl)}" aria-label="打开 ${esc(item.title)}">
-        <img class="site-icon" src="${esc(icon)}" alt="" loading="${index < 8 ? "eager" : "lazy"}" decoding="async" fetchpriority="${index < 4 ? "high" : "low"}">
+        <img class="site-icon" src="${esc(icon)}" alt="" loading="${index < 8 ? "eager" : "lazy"}" decoding="async" fetchpriority="${index < 4 ? "high" : "low"}" onerror="this.outerHTML='<span class=&quot;site-icon site-icon-fallback&quot;>${esc(fallback)}</span>'">
       </a>
       <div class="nav-card-actions">
         <button class="copy-btn" data-copy="${item.id}" title="复制链接" aria-label="复制链接">⧉</button>
@@ -194,16 +198,6 @@ function render() {
 
 function bindGridEvents() {
   const grid = $("#navGrid");
-  grid.querySelectorAll("img.site-icon, img.recent-icon").forEach((img) => {
-    img.addEventListener("error", () => {
-      const item = state.items.find((value) => Number(value.id) === Number(img.closest("[data-id]")?.dataset.id));
-      if (!item) return;
-      const span = document.createElement("span");
-      span.className = img.classList.contains("recent-icon") ? "recent-icon-fallback" : "site-icon site-icon-fallback";
-      span.textContent = fallbackIcon(item);
-      img.replaceWith(span);
-    }, { once: true });
-  });
   grid.onclick = async (event) => {
     const favoriteButton = event.target.closest("[data-fav]");
     if (favoriteButton) {
@@ -262,7 +256,7 @@ async function copyText(text) {
 function renderRecent() {
   const items = state.recent.map((id) => state.items.find((item) => item.id === id)).filter(Boolean);
   $("#recentGrid").innerHTML = items.length
-    ? items.map((item) => `<a class="recent-item" data-id="${item.id}" href="${esc(item.code ? location.origin + "/" + item.code : item.url)}"><img class="recent-icon" src="${esc(item.icon || item.favicon_url || iconUrl(item.url))}" alt="" loading="lazy" decoding="async"><span>${esc(item.title)}</span></a>`).join("")
+    ? items.map((item) => `<a class="recent-item" href="${esc(item.code ? location.origin + "/" + item.code : item.url)}"><img src="${esc(item.icon || iconUrl(item.url))}" alt="" loading="lazy" decoding="async" onerror="this.outerHTML='<span class=&quot;recent-icon-fallback&quot;>${esc(fallbackIcon(item))}</span>'"><span>${esc(item.title)}</span></a>`).join("")
     : '<span style="color:var(--faint);font-size:13px">还没有访问记录</span>';
 }
 

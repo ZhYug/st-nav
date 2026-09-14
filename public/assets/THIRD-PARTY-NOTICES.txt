@@ -1,7 +1,0 @@
-ST Nav third-party notices
-
-QRCode.js 1.0.0
-- Project: https://github.com/davidshimjs/qrcodejs
-- License: MIT
-- Used by: admin.html for client-side QR code generation.
-- CDN delivery is pinned with SRI and crossorigin="anonymous".
