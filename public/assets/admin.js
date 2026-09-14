@@ -1,4 +1,7 @@
-const A = { links: [], nav: [], settings: {}, navSelected: new Set(), navDirty: false };
+const A = {
+  links: [], nav: [], settings: {}, navSelected: new Set(), navDirty: false,
+  linkPage: 1, navPage: 1, linkPageSize: 10, navPageSize: 12,
+};
 
 function toast(message) {
   const node = document.createElement("div");
@@ -73,6 +76,8 @@ async function loadAll() {
     A.settings = data.settings || {};
     A.navSelected = new Set();
     A.navDirty = false;
+    A.linkPage = 1;
+    A.navPage = 1;
     renderDashboard(data.dashboard || {});
     renderLinks();
     renderNav();
@@ -136,41 +141,71 @@ function linkedNav(item) {
   return A.nav.find((nav) => Number(nav.link_id) === Number(item.id));
 }
 
-function renderLinks() {
-  const query = ($("#linkSearch")?.value || "").toLowerCase();
+function renderPagination(container, page, total, pageSize, onChange) {
+  const node = $(container);
+  if (!node) return;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const current = Math.min(Math.max(1, page), pages);
+  if (total <= pageSize) {
+    node.innerHTML = "";
+    return;
+  }
+  const start = Math.max(1, current - 2);
+  const end = Math.min(pages, start + 4);
+  const pageButtons = [];
+  for (let p = start; p <= end; p++) {
+    pageButtons.push(`<button class="page-btn ${p === current ? "active" : ""}" data-page="${p}">${p}</button>`);
+  }
+  node.innerHTML = `
+    <span class="pagination-info">共 ${total} 项，第 ${current}/${pages} 页</span>
+    <div class="pagination-actions">
+      <button class="page-btn" data-page="${current - 1}" ${current <= 1 ? "disabled" : ""}>上一页</button>
+      ${pageButtons.join("")}
+      <button class="page-btn" data-page="${current + 1}" ${current >= pages ? "disabled" : ""}>下一页</button>
+    </div>`;
+  node.querySelectorAll("[data-page]").forEach((button) => {
+    button.onclick = () => {
+      const target = Number(button.dataset.page);
+      if (target >= 1 && target <= pages && target !== current) onChange(target);
+    };
+  });
+}
 
+function renderLinks() {
+  const query = ($("#linkSearch")?.value || "").trim().toLowerCase();
   const rows = A.links.filter((item) =>
     [item.code, item.url, item.title, item.category]
-      .join(" ")
-      .toLowerCase()
-      .includes(query)
+      .join(" ").toLowerCase().includes(query)
   );
+  const pages = Math.max(1, Math.ceil(rows.length / A.linkPageSize));
+  A.linkPage = Math.min(Math.max(1, A.linkPage), pages);
+  const offset = (A.linkPage - 1) * A.linkPageSize;
+  const pageRows = rows.slice(offset, offset + A.linkPageSize);
 
-  $("#linksTable").innerHTML = rows.map((item) => {
+  $("#linksTable").innerHTML = pageRows.map((item) => {
     const linked = linkedNav(item);
-
     return `
       <tr class="link-dense-row">
         <td data-label="短码"><strong>/${esc(item.code)}</strong></td>
-        <td data-label="目标">
-          <div class="link-dense-title" title="${esc(item.title || item.url)}">${esc(item.title || item.url)}</div>
-        </td>
+        <td data-label="目标"><div class="link-dense-title" title="${esc(item.title || item.url)}">${esc(item.title || item.url)}</div></td>
         <td data-label="分类"><span class="link-category">${esc(item.category || "未分类")}</span></td>
         <td data-label="点击"><span class="click-count">${Number(item.clicks || 0).toLocaleString()}</span></td>
         <td data-label="状态"><span class="status ${item.enabled ? "on" : "off"}">${item.enabled ? "启用" : "停用"}</span></td>
-        <td data-label="操作">
-          <div class="row-actions compact-actions">
-            <button class="small-btn" data-act="nav" data-id="${item.id}" aria-label="${linked ? "已在导航" : "添加到导航"}" title="${linked ? "已在导航" : "添加到导航"}">${linked ? "✓" : "+"}</button>
-            <button class="small-btn edit-btn" data-act="edit" data-id="${item.id}" aria-label="编辑" title="编辑">✎</button>
-            <button class="small-btn danger-btn del-btn" data-act="del" data-id="${item.id}" aria-label="删除" title="删除">×</button>
-          </div>
-        </td>
+        <td data-label="操作"><div class="row-actions compact-actions">
+          <button class="small-btn" data-act="nav" data-id="${item.id}" aria-label="${linked ? "已在导航" : "添加到导航"}" title="${linked ? "已在导航" : "添加到导航"}">${linked ? "✓" : "+"}</button>
+          <button class="small-btn edit-btn" data-act="edit" data-id="${item.id}" aria-label="编辑" title="编辑">✎</button>
+          <button class="small-btn danger-btn del-btn" data-act="del" data-id="${item.id}" aria-label="删除" title="删除">×</button>
+        </div></td>
       </tr>`;
-  }).join("") ||
-  '<tr><td colspan="5" style="text-align:center;padding:30px">暂无短链接</td></tr>';
+  }).join("") || '<tr><td colspan="6" style="text-align:center;padding:30px">暂无短链接</td></tr>';
+
+  renderPagination("#linksPagination", A.linkPage, rows.length, A.linkPageSize, (page) => {
+    A.linkPage = page;
+    renderLinks();
+  });
 }
 
-$("#linkSearch").oninput = renderLinks;
+$("#linkSearch").oninput = () => { A.linkPage = 1; renderLinks(); };
 $("#linksTable").onclick = (event) => {
   const button = event.target.closest("[data-act]");
   if (!button) return;
@@ -265,13 +300,16 @@ function renderNav() {
   refreshNavFilters();
   const element = $("#navAdminGrid");
   const items = navFilteredItems();
+  const pages = Math.max(1, Math.ceil(items.length / A.navPageSize));
+  A.navPage = Math.min(Math.max(1, A.navPage), pages);
+  const pageItems = items.slice((A.navPage - 1) * A.navPageSize, A.navPage * A.navPageSize);
   const filtered = items.length !== A.nav.length;
   $("#navCount").innerHTML = (filtered ? `${items.length} / ${A.nav.length} 项` : `${A.nav.length} 项`) + (A.navDirty ? '<span class="nav-dirty">未保存</span>' : '');
   $("#navFilterHint").classList.toggle("hidden", !filtered);
-  element.innerHTML = items.map((item) => `
-    <div class="admin-nav-card ${A.navSelected.has(item.id) ? "selected" : ""}" draggable="true" data-id="${item.id}">
+  element.innerHTML = pageItems.map((item) => `
+    <div class="admin-nav-card ${A.navSelected.has(Number(item.id)) ? "selected" : ""}" draggable="${filtered ? "false" : "true"}" data-id="${item.id}">
       <div class="admin-nav-head">
-        <div class="admin-nav-selection"><input type="checkbox" data-navact="select" data-id="${item.id}" ${A.navSelected.has(item.id) ? "checked" : ""} aria-label="选择 ${esc(item.title)}"><div class="admin-icon-wrap">
+        <div class="admin-nav-selection"><input type="checkbox" data-navact="select" data-id="${item.id}" ${A.navSelected.has(Number(item.id)) ? "checked" : ""} aria-label="选择 ${esc(item.title)}"><div class="admin-icon-wrap">
           <img class="site-icon" src="${esc(navIcon(item))}" alt="" onerror="this.outerHTML='<span class=&quot;site-icon site-icon-fallback&quot;>${esc(fallbackIcon(item))}</span>'">
         </div></div>
         <div class="admin-nav-title"><strong>${esc(item.title)}</strong><small>${esc(item.category || "未分类")}</small></div>
@@ -279,10 +317,7 @@ function renderNav() {
       </div>
       <p>${esc(item.description || item.url)}</p>
       <div class="nav-admin-meta">
-        <div class="nav-admin-badges">
-          ${item.link_id ? '<span class="linked-badge">短链接</span>' : '<span class="manual-badge">手动</span>'}
-          <span class="nav-order-badge">#${Number(item.sort_order ?? 0) + 1}</span>
-        </div>
+        <div class="nav-admin-badges">${item.link_id ? '<span class="linked-badge">短链接</span>' : '<span class="manual-badge">手动</span>'}<span class="nav-order-badge">#${Number(item.sort_order ?? 0) + 1}</span></div>
         <span class="nav-url" title="${esc(item.url)}">${esc(item.url)}</span>
       </div>
       <div class="row-actions nav-admin-actions">
@@ -294,26 +329,50 @@ function renderNav() {
       </div>
     </div>
   `).join("") || '<div class="panel" style="padding:30px">暂无导航</div>';
+  renderPagination("#navPagination", A.navPage, items.length, A.navPageSize, (page) => {
+    A.navPage = page;
+    renderNav();
+  });
   bindDrag();
 }
 
 function bindDrag() {
-  let dragging = null;
   const isFiltered = !!($("#navSearch")?.value || $("#navCategoryFilter")?.value);
+  if (isFiltered) return;
+  let dragging = null;
   document.querySelectorAll(".admin-nav-card").forEach((card) => {
     card.ondragstart = (event) => {
-      if (isFiltered) { event.preventDefault(); return; }
-      dragging = card; card.classList.add("dragging");
+      dragging = card;
+      card.classList.add("dragging");
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", card.dataset.id);
     };
-    card.ondragend = () => { card.classList.remove("dragging"); dragging = null; };
+    card.ondragend = () => {
+      card.classList.remove("dragging");
+      dragging = null;
+    };
     card.ondragover = (event) => {
       event.preventDefault();
       if (!dragging || dragging === card) return;
       const rect = card.getBoundingClientRect();
       card.parentNode.insertBefore(dragging, event.clientY > rect.top + rect.height / 2 ? card.nextSibling : card);
     };
+    card.ondrop = (event) => {
+      event.preventDefault();
+      if (!dragging) return;
+      const visibleIds = [...document.querySelectorAll(".admin-nav-card")].map((node) => Number(node.dataset.id));
+      const visibleSet = new Set(visibleIds);
+      const positions = A.nav.map((item, index) => visibleSet.has(Number(item.id)) ? index : -1).filter((index) => index >= 0);
+      const reordered = visibleIds.map((id) => A.nav.find((item) => Number(item.id) === id)).filter(Boolean);
+      positions.forEach((position, index) => { A.nav[position] = reordered[index]; });
+      A.nav.forEach((value, index) => { value.sort_order = index; });
+      A.navDirty = true;
+      renderNav();
+      toast("顺序已调整，点击“保存排序”后生效");
+    };
   });
 }
+
 
 $("#navAdminGrid").onclick = async (event) => {
   const button = event.target.closest("[data-navact]");
@@ -342,8 +401,8 @@ $("#navAdminGrid").onclick = async (event) => {
   }
 };
 
-$("#navSearch").oninput = renderNav;
-$("#navCategoryFilter").onchange = renderNav;
+$("#navSearch").oninput = () => { A.navPage = 1; renderNav(); };
+$("#navCategoryFilter").onchange = () => { A.navPage = 1; renderNav(); };
 $("#clearNavFilter").onclick = () => {
   $("#navSearch").value = "";
   $("#navCategoryFilter").value = "";
@@ -351,7 +410,7 @@ $("#clearNavFilter").onclick = () => {
 };
 
 $("#saveNavOrder").onclick = async () => {
-  const ids = [...document.querySelectorAll(".admin-nav-card")].map((node) => Number(node.dataset.id));
+  const ids = A.nav.map((item) => Number(item.id));
   try { await api("/api/admin/navigation/reorder", { method: "POST", body: JSON.stringify({ ids }) }); A.navDirty = false; toast("排序已保存"); await loadAll(); }
   catch (error) { toast(error.message); }
 };

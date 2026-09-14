@@ -811,3 +811,67 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
   .admin-page .nav-admin-actions .small-btn{height:28px;min-height:28px;font-size:8.5px}
   .admin-page .nav-dirty{font-size:9px}
 }
+
+/* admin pagination */
+.pagination{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:14px 16px;
+  border-top:1px solid var(--border);
+  color:var(--faint);
+  font-size:12px;
+}
+.pagination-actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.page-btn{
+  min-width:34px;height:32px;padding:0 9px;
+  border:1px solid var(--border);border-radius:8px;
+  background:var(--surface2);color:var(--muted);
+}
+.page-btn:hover:not(:disabled){color:var(--text);border-color:var(--border2)}
+.page-btn.active{color:#fff;background:var(--primary);border-color:var(--primary)}
+.page-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* settings layout */
+.settings-form{
+  max-width:1120px;
+  padding:24px;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:18px;
+}
+.settings-group{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  align-content:start;
+  gap:14px;
+  padding:20px;
+  border:1px solid var(--border);
+  border-radius:16px;
+  background:rgba(255,255,255,.025);
+}
+.settings-group>div:first-child{grid-column:1/-1}
+.settings-group>div:first-child strong{font-size:15px}
+.settings-group>div:first-child small{display:block;margin-top:3px}
+.settings-group:first-child{grid-column:1/-1}
+.settings-group:first-child label:last-child{max-width:100%}
+.settings-two{grid-column:1/-1}
+.settings-form>.btn{grid-column:1}
+.settings-form>#settingsMessage{align-self:center}
+.settings-group label{min-width:0}
+.settings-form input,.settings-form select{min-height:42px}
+
+@media(max-width:900px){
+  .settings-form{grid-template-columns:1fr}
+  .settings-group:first-child{grid-column:auto}
+}
+@media(max-width:600px){
+  .pagination{align-items:flex-start;flex-direction:column}
+  .pagination-actions{width:100%}
+  .page-btn{flex:0 0 auto}
+  .settings-form{padding:14px}
+  .settings-group{grid-template-columns:1fr;padding:16px}
+  .settings-group>div:first-child,.settings-two{grid-column:auto}
+  .settings-two{grid-template-columns:repeat(2,1fr)}
+}

@@ -1,5 +1,5 @@
 
-const VERSION = "1.0.9";
+const VERSION = "1.1.0";
 const SESSION_COOKIE = "__Host-stnav_session";
 const SESSION_TTL = 86400;
 const PUBLIC_CACHE_CONTROL = "public, max-age=0, s-maxage=30, stale-while-revalidate=60";
