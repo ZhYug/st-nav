@@ -1,5 +1,5 @@
 
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 const getVersion = (env) => String(env.ST_NAV_VERSION || VERSION);
 const SESSION_COOKIE = "__Host-stnav_session";
 const SESSION_TTL = 86400;
@@ -56,7 +56,7 @@ const SECURITY_HEADERS = {
   "referrer-policy": "strict-origin-when-cross-origin",
   "permissions-policy": "camera=(), microphone=(), geolocation=()",
   "x-frame-options": "DENY",
-  "content-security-policy": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';",
+  "content-security-policy": "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';",
 };
 
 const json = (data, status = 200, headers = {}) =>
@@ -241,14 +241,16 @@ class RequestError extends Error {
 }
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
+const MAX_IMPORT_ROWS = 1000;
+const MAX_PAGE_SIZE = 100;
 
-async function body(request) {
+async function body(request, maxBytes = MAX_JSON_BODY_BYTES) {
   const length = Number(request.headers.get("content-length"));
-  if (Number.isFinite(length) && length > MAX_JSON_BODY_BYTES) {
+  if (Number.isFinite(length) && length > maxBytes) {
     throw new RequestError("请求体过大", 413);
   }
   const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > MAX_JSON_BODY_BYTES) {
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
     throw new RequestError("请求体过大", 413);
   }
   if (!text.trim()) return {};
@@ -312,7 +314,7 @@ async function getPublicBootstrap(env) {
     env.DB.prepare(
       `SELECT navigation.id,navigation.title,navigation.description,navigation.url,
               navigation.icon,navigation.category,navigation.sort_order,navigation.enabled,
-              navigation.link_id,links.code
+              navigation.link_id,links.code,links.url AS link_url
        FROM navigation
        LEFT JOIN links ON navigation.link_id = links.id
        WHERE navigation.enabled=1
@@ -323,7 +325,10 @@ async function getPublicBootstrap(env) {
   ]);
 
   return {
-    items: results[0].results,
+    items: results[0].results.map((item) => ({
+      ...item,
+      favicon_url: `/api/favicon?url=${encodeURIComponent(item.link_url || item.url)}`,
+    })),
     settings: Object.fromEntries(results[1].results.map((x) => [x.key, x.value])),
   };
 }
@@ -400,13 +405,70 @@ function recordLoginFailure(request) {
 }
 function clearLoginFailures(request) { loginAttempts.delete(clientKey(request)); }
 
+
+function pagination(url, defaults = {}) {
+  const page = Math.max(1, Number.parseInt(url.searchParams.get("page") || defaults.page || "1", 10) || 1);
+  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(10, Number.parseInt(url.searchParams.get("pageSize") || defaults.pageSize || "50", 10) || 50));
+  return { page, pageSize, offset: (page - 1) * pageSize };
+}
+
+function faviconTarget(value) {
+  try {
+    const url = new URL(String(value));
+    if (!/^https?:$/.test(url.protocol) || url.username || url.password || url.port) return null;
+    const host = url.hostname.toLowerCase();
+    if (!host || host === "localhost" || host.endsWith(".localhost") || host === "0.0.0.0" || host === "127.0.0.1" || host === "::1" || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) || host === "169.254.169.254") return null;
+    return new URL(`${url.protocol}//${host}/favicon.ico`);
+  } catch { return null; }
+}
+
+function faviconCacheKey(request, target) {
+  const url = new URL(request.url);
+  url.pathname = "/__stnav_favicon_cache";
+  url.search = `?url=${encodeURIComponent(target.origin)}`;
+  return new Request(url.toString(), { method: "GET" });
+}
+
+async function handleFavicon(request, env, ctx) {
+  const target = faviconTarget(new URL(request.url).searchParams.get("url"));
+  if (!target) return new Response("", { status: 400, headers: SECURITY_HEADERS });
+  if (!env.DB) return new Response("", { status: 503, headers: SECURITY_HEADERS });
+  const origin = target.origin;
+  const allowed = await env.DB.prepare(`SELECT EXISTS(
+    SELECT 1 FROM navigation WHERE url=? OR url LIKE ?
+  ) + EXISTS(
+    SELECT 1 FROM links WHERE url=? OR url LIKE ?
+  ) AS allowed`).bind(origin, `${origin}/%`, origin, `${origin}/%`).first();
+  if (!Number(allowed?.allowed || 0)) return new Response("", { status: 404, headers: SECURITY_HEADERS });
+  const key = faviconCacheKey(request, target);
+  if (typeof caches !== "undefined" && caches.default) {
+    const cached = await caches.default.match(key);
+    if (cached) return cached;
+  }
+  try {
+    const response = await fetch(target.toString(), { headers: { "User-Agent": "ST-Nav-Favicon/1.2.0" }, redirect: "manual" });
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok || (!contentType.startsWith("image/") && !contentType.includes("icon"))) {
+      return new Response("", { status: 404, headers: SECURITY_HEADERS });
+    }
+    const headers = new Headers(SECURITY_HEADERS);
+    headers.set("content-type", contentType.split(";")[0] || "image/x-icon");
+    headers.set("cache-control", "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400");
+    const result = new Response(response.body, { status: 200, headers });
+    if (typeof caches !== "undefined" && caches.default) waitUntil(ctx, caches.default.put(key, result.clone()));
+    return result;
+  } catch {
+    return new Response("", { status: 404, headers: SECURITY_HEADERS });
+  }
+}
+
 async function handleApi(request, env, ctx, parts) {
   const method = request.method.toUpperCase();
   const path = "/" + parts.join("/");
 
   // Authentication and health checks do not require D1. This keeps failed-login
   // traffic away from the database and makes health probes cheap.
-  const needsDatabase = path !== "/api/health";
+  const needsDatabase = path !== "/api/health" && path !== "/api/favicon";
   if (needsDatabase) await ensureDatabase(env);
 
   if (path === "/api/auth/login" && method === "POST") {
@@ -451,6 +513,10 @@ async function handleApi(request, env, ctx, parts) {
     return json({ ok: true, version: getVersion(env) });
   }
 
+  if (path === "/api/favicon" && method === "GET") {
+    return handleFavicon(request, env, ctx);
+  }
+
   if (path === "/api/public/bootstrap" && method === "GET") {
     return cachedPublicBootstrap(request, env, ctx);
   }
@@ -492,29 +558,10 @@ async function handleApi(request, env, ctx, parts) {
        WHERE day>=?
        GROUP BY day
        ORDER BY day`).bind(start),
-      env.DB.prepare("SELECT * FROM links ORDER BY created_at DESC,id DESC"),
-      env.DB.prepare(`SELECT
-        navigation.id,navigation.title,navigation.description,navigation.url,navigation.icon,
-        navigation.category,navigation.sort_order,navigation.enabled,navigation.created_at,
-        navigation.updated_at,navigation.link_id,links.code,links.title AS link_title,
-        links.description AS link_description,links.category AS link_category,
-        links.enabled AS link_enabled
-       FROM navigation
-       LEFT JOIN links ON navigation.link_id = links.id
-       ORDER BY navigation.sort_order,navigation.id`),
       env.DB.prepare("SELECT key,value FROM settings"),
     ]);
 
     const origin = new URL(request.url).origin;
-    const links = results[3].results.map((item) => ({
-      ...item,
-      short_url: item.code ? `${origin}/${item.code}` : "",
-    }));
-    const nav = results[4].results.map((item) => ({
-      ...item,
-      short_url: item.code ? `${origin}/${item.code}` : "",
-      url: item.code ? `${origin}/${item.code}` : item.url,
-    }));
     const trendMap = new Map(results[2].results.map((row) => [row.day, Number(row.clicks) || 0]));
     const trend = [];
     for (let offset = 13; offset >= 0; offset--) {
@@ -526,9 +573,7 @@ async function handleApi(request, env, ctx, parts) {
 
     return json({
       dashboard: { stats: results[0].results[0], topLinks: results[1].results, trend },
-      links,
-      navigation: nav,
-      settings: Object.fromEntries(results[5].results.map((x) => [x.key, x.value])),
+      settings: Object.fromEntries(results[3].results.map((x) => [x.key, x.value])),
     });
   }
 
@@ -556,17 +601,55 @@ async function handleApi(request, env, ctx, parts) {
     return json({ stats, topLinks: top.results, trend: trendRows });
   }
 
-  if (path === "/api/admin/links" && method === "GET") {
-    const result = await env.DB.prepare(
-      "SELECT * FROM links ORDER BY created_at DESC,id DESC"
-    ).all();
-    const origin = new URL(request.url).origin;
-    const items = result.results.map((item) => ({
-      ...item,
-      short_url: item.code ? `${origin}/${item.code}` : "",
-    }));
+  if (path === "/api/admin/links/import" && method === "POST") {
+    const data = await body(request, 3 * 1024 * 1024);
+    if (!Array.isArray(data.rows) || !data.rows.length || data.rows.length > MAX_IMPORT_ROWS) {
+      return json({ error: `导入记录必须为 1-${MAX_IMPORT_ROWS} 条` }, 400);
+    }
+    let success = 0;
+    const errors = [];
+    for (let index = 0; index < data.rows.length; index++) {
+      const row = data.rows[index] || {};
+      const url = clean(row.url, 2000);
+      if (!validUrl(url)) { errors.push({ row: index + 2, error: "URL 必须是 http/https" }); continue; }
+      let code = clean(row.code, 64);
+      const autoCode = !code;
+      if (!autoCode && (!CODE_RE.test(code) || RESERVED_CODES.has(code.toLowerCase()))) {
+        errors.push({ row: index + 2, error: "短码格式不合法或为保留字" }); continue;
+      }
+      const insert = () => env.DB.prepare(`INSERT INTO links(code,url,title,description,category,enabled,updated_at) VALUES(?,?,?,?,?,?,?)`)
+        .bind(code, url, clean(row.title, 200), clean(row.description, 500), clean(row.category, 80), row.enabled === false || String(row.enabled).toLowerCase() === "false" ? 0 : 1, now()).run();
+      let inserted = false;
+      for (let attempt = 0; attempt < (autoCode ? 5 : 1); attempt++) {
+        if (autoCode) code = randomCode();
+        try { await insert(); inserted = true; break; }
+        catch (error) {
+          if (String(error?.message || "").toLowerCase().includes("unique")) { if (autoCode) continue; break; }
+          throw error;
+        }
+      }
+      if (inserted) success++; else errors.push({ row: index + 2, error: "短码已存在或无法生成唯一短码" });
+    }
+    invalidatePublicCache(request, ctx);
+    return json({ ok: true, success, failed: errors.length, errors: errors.slice(0, 100) });
+  }
 
-    return json({ items });
+  if (path === "/api/admin/links" && method === "GET") {
+    const urlObj = new URL(request.url);
+    const { page, pageSize, offset } = pagination(urlObj);
+    const q = clean(urlObj.searchParams.get("q"), 120).toLowerCase();
+    const like = `%${q}%`;
+    const where = q ? "WHERE lower(code || ' ' || url || ' ' || COALESCE(title,'') || ' ' || COALESCE(category,'')) LIKE ?" : "";
+    const params = q ? [like] : [];
+    const [count, rows] = await env.DB.batch([
+      env.DB.prepare(`SELECT COUNT(*) total FROM links ${where}`).bind(...params),
+      env.DB.prepare(`SELECT links.*, (SELECT id FROM navigation WHERE navigation.link_id=links.id LIMIT 1) navigation_id
+        FROM links ${where} ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?`).bind(...params, pageSize, offset),
+    ]);
+    const total = Number(count.results[0]?.total || 0);
+    const origin = new URL(request.url).origin;
+    const items = rows.results.map((item) => ({ ...item, short_url: item.code ? `${origin}/${item.code}` : "" }));
+    return json({ items, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
   }
 
   if (path === "/api/admin/links" && method === "POST") {
@@ -690,30 +773,33 @@ async function handleApi(request, env, ctx, parts) {
   }
 
   if (path === "/api/admin/navigation" && method === "GET") {
-    const result = await env.DB.prepare(
-      `SELECT
-        navigation.id,navigation.title,navigation.description,navigation.url,navigation.icon,
-        navigation.category,navigation.sort_order,navigation.enabled,navigation.created_at,
-        navigation.updated_at,navigation.link_id,
-        links.code,
-        links.title AS link_title,
-        links.description AS link_description,
-        links.category AS link_category,
-        links.enabled AS link_enabled
-       FROM navigation
-       LEFT JOIN links ON navigation.link_id = links.id
-       ORDER BY navigation.sort_order,navigation.id`
-    ).all();
+    const urlObj = new URL(request.url);
+    const { page, pageSize, offset } = pagination(urlObj);
+    const q = clean(urlObj.searchParams.get("q"), 120).toLowerCase();
+    const category = clean(urlObj.searchParams.get("category"), 80);
+    const filters = [];
+    const params = [];
+    if (q) { filters.push("lower(navigation.title || ' ' || COALESCE(navigation.description,'') || ' ' || COALESCE(navigation.category,'') || ' ' || navigation.url || ' ' || COALESCE(links.url,'')) LIKE ?"); params.push(`%${q}%`); }
+    if (category) { filters.push("COALESCE(navigation.category,'未分类') = ?"); params.push(category); }
+    const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+    const [count, rows, categories] = await env.DB.batch([
+      env.DB.prepare(`SELECT COUNT(*) total FROM navigation LEFT JOIN links ON navigation.link_id=links.id ${where}`).bind(...params),
+      env.DB.prepare(`SELECT navigation.id,navigation.title,navigation.description,navigation.url,navigation.icon,navigation.category,
+        navigation.sort_order,navigation.enabled,navigation.created_at,navigation.updated_at,navigation.link_id,
+        links.code,links.url AS link_url,links.title AS link_title,links.description AS link_description,links.category AS link_category,links.enabled AS link_enabled
+        FROM navigation LEFT JOIN links ON navigation.link_id=links.id ${where}
+        ORDER BY navigation.sort_order,navigation.id LIMIT ? OFFSET ?`).bind(...params, pageSize, offset),
+      env.DB.prepare("SELECT DISTINCT COALESCE(category,'未分类') category FROM navigation ORDER BY category"),
+    ]);
+    const total = Number(count.results[0]?.total || 0);
     const origin = new URL(request.url).origin;
-    const items = result.results.map((item) => ({
+    const items = rows.results.map((item) => ({
       ...item,
       short_url: item.code ? `${origin}/${item.code}` : "",
-      // 对关联短链接的导航，url 是实际可点击的短链接地址；
-      // 手动导航则保留数据库中的目标 URL。
       url: item.code ? `${origin}/${item.code}` : item.url,
+      favicon_url: `/api/favicon?url=${encodeURIComponent(item.link_url || item.url)}`,
     }));
-
-    return json({ items });
+    return json({ items, categories: categories.results.map((row) => row.category).filter(Boolean), page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
   }
 
   if (path === "/api/admin/navigation" && method === "POST") {
@@ -745,10 +831,7 @@ async function handleApi(request, env, ctx, parts) {
       const requestUrl = new URL(request.url);
       const shortUrl = requestUrl.origin + "/" + link.code;
 
-      const icon =
-        "https://icons.duckduckgo.com/ip3/" +
-        encodeURIComponent(new URL(link.url).hostname) +
-        ".ico";
+      const icon = "";
 
       await env.DB.prepare(
         `INSERT INTO navigation
@@ -780,6 +863,9 @@ async function handleApi(request, env, ctx, parts) {
       return json({ error: "标题和有效 URL 必填" }, 400);
     }
 
+    const icon = clean(data.icon, 1000);
+    if (icon && !validUrl(icon)) return json({ error: "图标 URL 必须是 http/https" }, 400);
+
     await env.DB.prepare(
       `INSERT INTO navigation
        (title,description,url,icon,category,sort_order,enabled,updated_at)
@@ -790,7 +876,7 @@ async function handleApi(request, env, ctx, parts) {
         title,
         clean(data.description, 500),
         url,
-        clean(data.icon, 1000),
+        icon,
         clean(data.category, 80),
         data.enabled === false ? 0 : 1,
         now()
@@ -824,6 +910,28 @@ async function handleApi(request, env, ctx, parts) {
     await env.DB.batch(statements);
     invalidatePublicCache(request, ctx);
     return json({ ok: true, count: ids.length });
+  }
+
+  if (path === "/api/admin/navigation/move" && method === "POST") {
+    const data = await body(request);
+    const id = Number(data.id);
+    const direction = data.direction === "up" ? "up" : data.direction === "down" ? "down" : "";
+    if (!Number.isInteger(id) || id <= 0 || !direction) return json({ error: "移动参数无效" }, 400);
+    const current = await env.DB.prepare("SELECT id,sort_order FROM navigation WHERE id=?").bind(id).first();
+    if (!current) return json({ error: "导航不存在" }, 404);
+    const neighbor = await env.DB.prepare(
+      direction === "up"
+        ? "SELECT id,sort_order FROM navigation WHERE sort_order < ? ORDER BY sort_order DESC,id DESC LIMIT 1"
+        : "SELECT id,sort_order FROM navigation WHERE sort_order > ? ORDER BY sort_order ASC,id ASC LIMIT 1"
+    ).bind(current.sort_order).first();
+    if (!neighbor) return json({ ok: true, moved: false });
+    const timestamp = now();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE navigation SET sort_order=?,updated_at=? WHERE id=?").bind(neighbor.sort_order, timestamp, current.id),
+      env.DB.prepare("UPDATE navigation SET sort_order=?,updated_at=? WHERE id=?").bind(current.sort_order, timestamp, neighbor.id),
+    ]);
+    invalidatePublicCache(request, ctx);
+    return json({ ok: true, moved: true });
   }
 
   if (path === "/api/admin/navigation/reorder" && method === "POST") {
@@ -868,7 +976,9 @@ async function handleApi(request, env, ctx, parts) {
 
       const title = clean(data.title, 120);
       const url = clean(data.url, 2000);
+      const icon = clean(data.icon, 1000);
       if (!title || !validUrl(url)) return json({ error: "标题和有效 URL 必填" }, 400);
+      if (icon && !validUrl(icon)) return json({ error: "图标 URL 必须是 http/https" }, 400);
 
       const result = await env.DB.prepare(
         `UPDATE navigation SET title=?,description=?,url=?,icon=?,category=?,enabled=?,updated_at=?
@@ -878,7 +988,7 @@ async function handleApi(request, env, ctx, parts) {
           title,
           clean(data.description, 500),
           url,
-          clean(data.icon, 1000),
+          icon,
           clean(data.category, 80),
           data.enabled === false ? 0 : 1,
           now(),

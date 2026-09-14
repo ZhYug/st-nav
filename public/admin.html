@@ -37,10 +37,10 @@
       </section>
       <section id="section-links" class="admin-section hidden">
         <div class="section-bar"><div><h2>短链接</h2><p>创建、管理和分析你的短链接。</p></div><div class="bar-actions"><button class="btn secondary" id="exportLinks">导出 CSV</button><button class="btn primary" id="addLinkBtn">+ 新建短链接</button></div></div>
-        <div class="panel table-panel"><div class="table-tools"><input id="linkSearch" placeholder="搜索短链接…"><button class="btn secondary" id="importLinksBtn">批量导入 CSV</button><input id="csvFile" type="file" accept=".csv,text/csv" class="hidden"></div><div class="table-scroll"><table><thead><tr><th>短码</th><th>目标</th><th>分类</th><th>点击</th><th>状态</th><th></th></tr></thead><tbody id="linksTable"></tbody></table></div></div>
+        <div class="panel table-panel"><div class="table-tools"><input id="linkSearch" placeholder="搜索短链接…"><button class="btn secondary" id="importLinksBtn">批量导入 CSV</button><input id="csvFile" type="file" accept=".csv,text/csv" class="hidden"></div><div class="table-scroll"><table><thead><tr><th>短码</th><th>目标</th><th>分类</th><th>点击</th><th>状态</th><th></th></tr></thead><tbody id="linksTable"></tbody></table></div><div id="linksPagination" class="admin-pagination"></div></div>
       </section>
       <section id="section-navigation" class="admin-section hidden">
-        <div class="section-bar"><div><h2>导航管理</h2><p>拖拽调整顺序；关联短链接会自动同步。<span id="navCount" class="section-count">0 项</span></p></div><div class="bar-actions"><button class="btn secondary" id="saveNavOrder">保存排序</button><button class="btn primary" id="addNavBtn">+ 添加导航</button></div></div>
+        <div class="section-bar"><div><h2>导航管理</h2><p>拖拽调整顺序；关联短链接会自动同步。<span id="navCount" class="section-count">0 项</span></p></div><div class="bar-actions"><button class="btn secondary" id="saveNavOrder" disabled title="使用卡片上的 ↑ / ↓ 直接保存">排序自动保存</button><button class="btn primary" id="addNavBtn">+ 添加导航</button></div></div>
         <div class="nav-admin-toolbar panel">
           <div class="nav-admin-search"><span>⌕</span><input id="navSearch" type="search" placeholder="搜索标题、URL、分类…" autocomplete="off"></div>
           <select id="navCategoryFilter" aria-label="筛选分类"><option value="">全部分类</option></select>
@@ -54,7 +54,7 @@
           <button class="text-btn" id="disableSelectedNav" type="button">批量停用</button>
           <button class="text-btn danger-btn" id="deleteSelectedNav" type="button">批量删除</button>
         </div>
-        <div id="navAdminGrid" class="admin-nav-grid"></div>
+        <div id="navAdminGrid" class="admin-nav-grid"></div><div id="navPagination" class="admin-pagination"></div>
       </section>
       <section id="section-settings" class="admin-section hidden">
         <div class="section-bar"><div><h2>系统设置</h2><p>统一管理前台标题、描述、视觉强调色和导航排版。</p></div></div>
@@ -87,7 +87,7 @@
   </div>
   <div id="modal" class="modal hidden"><div class="modal-backdrop" data-close-modal></div><div class="modal-card"><div class="modal-head"><h3 id="modalTitle"></h3><button class="icon-btn" data-close-modal>×</button></div><div id="modalBody"></div></div></div>
   <div id="toastRoot" class="toast-root"></div>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="/assets/admin.js" defer></script>
 </body>
 </html>

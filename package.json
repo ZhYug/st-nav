@@ -1,7 +1,7 @@
 {
   "name": "st-nav",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "description": "ST Nav — Cloudflare Pages Advanced Mode + D1",
   "scripts": {
@@ -9,7 +9,8 @@
     "deploy": "wrangler pages deploy public",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "doctor": "node scripts/doctor.mjs"
+    "doctor": "node scripts/doctor.mjs",
+    "test": "node scripts/smoke.mjs"
   },
   "devDependencies": {
     "wrangler": "4.131.1"

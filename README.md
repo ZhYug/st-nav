@@ -1,4 +1,4 @@
-# ST Nav v1.1.0
+# ST Nav v1.2.0
 
 轻量级个人导航 + 短链接服务，运行在 **Cloudflare Pages Advanced Mode + D1**。
 
@@ -282,3 +282,14 @@ _worker.js
 - 增加导航管理批量选择、批量启用、批量停用和批量删除。
 - 导航排序增加“未保存”状态提示，降低误以为已保存的风险。
 - 导航管理桌面端进一步提高信息密度，减少空白并强化管理面板感。
+
+
+## v1.2.0 Audit follow-up
+
+- Admin short links and navigation now use server-side pagination and search/filter queries.
+- Navigation ordering uses direct global ↑ / ↓ moves, so pagination no longer conflicts with sorting.
+- Added a server-side bulk CSV import endpoint (max 1,000 rows / 2 MB client file).
+- Added first-party favicon proxy/cache endpoint to remove browser dependency on Google/DuckDuckGo favicon services.
+- Pinned the QRCode.js CDN dependency with version + SRI and tightened CSP; the QR library remains the only third-party script dependency.
+- Service Worker shell/cache version bumped and only successful responses are cached.
+- Added admin pagination UI and automated static health checks.

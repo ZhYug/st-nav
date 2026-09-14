@@ -1,5 +1,5 @@
-const CACHE = "st-nav-shell-v3";
-const SHELL = ["/", "/assets/styles.css", "/assets/app.js", "/assets/favicon.svg", "/manifest.webmanifest"];
+const CACHE = "st-nav-shell-v4";
+const SHELL = ["/", "/assets/styles.css", "/assets/app.js", "/assets/favicon.svg", "/manifest.webmanifest", "/assets/icon-192.png", "/assets/icon-512.png"];
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });
