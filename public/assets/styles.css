@@ -920,21 +920,26 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
   .public-page .nav-category-heading{font-size:15px;margin-bottom:9px}
 }
 
-/* Mobile admin: keep the sidebar and active navigation readable in light theme.
-   The mobile sidebar rule above intentionally sets a dark translucent background;
-   without this override it wins over the light-admin theme and makes the
-   SHORT LINKS / 首页 area look like a dark strip on light mode. */
+/* Mobile admin header: make the title/theme-switch row feel like a rounded floating panel. */
 @media (max-width:600px){
-  html.light-admin .admin-page .sidebar{
-    background:rgba(255,255,255,.86);
-    border-bottom-color:var(--border);
+  .admin-page .admin-header{
+    position:sticky;
+    top:72px;
+    z-index:10;
+    min-height:64px;
+    height:auto;
+    margin:8px 0 16px;
+    padding:9px 11px;
+    border:1px solid var(--border);
+    border-radius:16px;
+    background:var(--surface);
+    backdrop-filter:blur(20px);
+    -webkit-backdrop-filter:blur(20px);
+    box-shadow:0 10px 28px rgba(0,0,0,.08);
   }
-  html.light-admin .admin-page .side-item{
-    color:var(--muted);
-  }
-  html.light-admin .admin-page .side-item:hover,
-  html.light-admin .admin-page .side-item.active{
-    color:var(--text);
-    background:var(--surface3);
+
+  .admin-page .admin-header-actions .icon-btn,
+  .admin-page .mobile-home-btn{
+    border-radius:12px;
   }
 }
