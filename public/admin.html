@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b0d12"><title>管理后台</title>
-  <link rel="icon" href="/assets/favicon.svg"><link rel="stylesheet" href="/assets/styles.css">
+  <link rel="icon" href="/assets/favicon.svg">
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png"><link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body class="admin-page">
   <div id="loginView" class="login-view">
@@ -47,7 +48,7 @@
         </div>
         <div id="navFilterHint" class="nav-filter-hint hidden">筛选状态下暂不支持拖拽排序，请清除筛选后调整顺序。</div>
         <div class="nav-admin-bulk" id="navAdminBulk">
-          <button class="text-btn" id="selectAllNav" type="button">全选</button>
+          <span id="navSelectedCount" class="nav-selected-count">未选择</span><button class="text-btn" id="selectAllNav" type="button">全选</button>
           <button class="text-btn" id="clearSelectedNav" type="button">取消选择</button>
           <button class="text-btn" id="enableSelectedNav" type="button">批量启用</button>
           <button class="text-btn" id="disableSelectedNav" type="button">批量停用</button>

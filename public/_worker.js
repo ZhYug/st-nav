@@ -1,5 +1,6 @@
 
-const VERSION = "1.0.5";
+const VERSION = "1.1.0";
+const getVersion = (env) => String(env.ST_NAV_VERSION || VERSION);
 const SESSION_COOKIE = "__Host-stnav_session";
 const SESSION_TTL = 86400;
 const PUBLIC_CACHE_CONTROL = "public, max-age=0, s-maxage=30, stale-while-revalidate=60";
@@ -14,7 +15,7 @@ async function ensureDatabase(env) {
   let promise = databaseReady.get(env);
   if (!promise) {
     promise = (async () => {
-      const requiredTables = ["links", "link_daily_stats", "navigation", "settings"];
+      const requiredTables = ["links", "link_daily_stats", "navigation", "settings", "admin_sessions"];
       const result = await env.DB
         .prepare(`
           SELECT name
@@ -55,6 +56,7 @@ const SECURITY_HEADERS = {
   "referrer-policy": "strict-origin-when-cross-origin",
   "permissions-policy": "camera=(), microphone=(), geolocation=()",
   "x-frame-options": "DENY",
+  "content-security-policy": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';",
 };
 
 const json = (data, status = 200, headers = {}) =>
@@ -111,6 +113,18 @@ function clean(value, max = 2000) {
   return String(value ?? "").trim().slice(0, max);
 }
 
+function validateSetting(key, value) {
+  const v = clean(value, 500);
+  if (["nav_columns_mobile", "nav_columns_tablet", "nav_columns_desktop", "nav_columns_wide"].includes(key)) {
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 1 && n <= 6 ? String(n) : null;
+  }
+  if (key === "nav_tag_style") return ["pills", "tabs", "sections"].includes(v) ? v : null;
+  if (key === "accent") return /^#[0-9a-f]{6}$/i.test(v) ? v : null;
+  if (["nav_category_order", "nav_hidden_categories"].includes(key)) return v.slice(0, 1000);
+  return v;
+}
+
 function base64urlEncode(value) {
   return btoa(value)
     .replaceAll("+", "-")
@@ -143,10 +157,10 @@ async function hmac(secret, data) {
   return base64urlEncode(String.fromCharCode(...new Uint8Array(sig)));
 }
 
-async function sessionToken(secret) {
+async function sessionToken(secret, jti = crypto.randomUUID()) {
   const iat = Date.now();
-  const payload = base64urlEncode(JSON.stringify({ exp: iat + SESSION_TTL * 1000, iat }));
-  return `${payload}.${await hmac(secret, payload)}`;
+  const payload = base64urlEncode(JSON.stringify({ exp: iat + SESSION_TTL * 1000, iat, jti }));
+  return { token: `${payload}.${await hmac(secret, payload)}`, jti, exp: iat + SESSION_TTL * 1000 };
 }
 
 function getCookie(request, name) {
@@ -172,15 +186,15 @@ function sessionSecret(env) {
   return String(env.SESSION_SECRET || env.ADMIN_PASSWORD || "");
 }
 
-async function isAuthed(request, env) {
+async function parseSession(request, env) {
   const secret = sessionSecret(env);
-  if (!secret) return false;
+  if (!secret) return null;
   const token = getCookie(request, SESSION_COOKIE);
   const [payload, signature] = token.split(".");
-  if (!payload || !signature) return false;
+  if (!payload || !signature) return null;
   try {
     const data = JSON.parse(base64urlDecode(payload));
-    if (!data.exp || data.exp < Date.now()) return false;
+    if (!data.exp || data.exp < Date.now() || !data.jti || !/^[0-9a-f-]{36}$/i.test(data.jti)) return null;
     const signatureBytes = Uint8Array.from(
       atob(signature.replaceAll("-", "+").replaceAll("_", "/") + "===".slice((signature.length + 3) % 4)),
       (char) => char.charCodeAt(0)
@@ -189,12 +203,23 @@ async function isAuthed(request, env) {
       "raw", new TextEncoder().encode(secret),
       { name: "HMAC", hash: "SHA-256" }, false, ["verify"]
     );
-    return await crypto.subtle.verify(
+    const valid = await crypto.subtle.verify(
       { name: "HMAC" }, key, signatureBytes, new TextEncoder().encode(payload)
     );
+    if (!valid) return null;
+    const session = await env.DB.prepare(
+      "SELECT jti,expires_at FROM admin_sessions WHERE jti=? AND revoked_at IS NULL LIMIT 1"
+    ).bind(data.jti).first();
+    if (!session || Date.parse(session.expires_at) < Date.now()) return null;
+    return data;
   } catch {
-    return false;
+    return null;
   }
+}
+
+async function isAuthed(request, env) {
+  if (!env.DB) return false;
+  return Boolean(await parseSession(request, env));
 }
 
 function sameOrigin(request) {
@@ -381,12 +406,7 @@ async function handleApi(request, env, ctx, parts) {
 
   // Authentication and health checks do not require D1. This keeps failed-login
   // traffic away from the database and makes health probes cheap.
-  const needsDatabase = !(
-    path === "/api/auth/login" ||
-    path === "/api/auth/logout" ||
-    path === "/api/auth/me" ||
-    path === "/api/health"
-  );
+  const needsDatabase = path !== "/api/health";
   if (needsDatabase) await ensureDatabase(env);
 
   if (path === "/api/auth/login" && method === "POST") {
@@ -405,17 +425,22 @@ async function handleApi(request, env, ctx, parts) {
       return json({ error: "密码错误" }, 401);
     }
     clearLoginFailures(request);
-    const token = await sessionToken(sessionSecret(env));
-    return json({ ok: true }, 200, { "Set-Cookie": cookie(SESSION_COOKIE, token) });
+    await env.DB.prepare("DELETE FROM admin_sessions WHERE expires_at < ? OR revoked_at IS NOT NULL").bind(now()).run();
+    const session = await sessionToken(sessionSecret(env));
+    await env.DB.prepare(
+      "INSERT INTO admin_sessions(jti,created_at,expires_at) VALUES(?,?,?)"
+    ).bind(session.jti, now(), new Date(session.exp).toISOString()).run();
+    return json({ ok: true }, 200, { "Set-Cookie": cookie(SESSION_COOKIE, session.token) });
   }
 
   if (path === "/api/auth/logout" && method === "POST") {
     if (!sameOrigin(request)) return json({ error: "非法来源" }, 403);
-    return json(
-      { ok: true },
-      200,
-      { "Set-Cookie": cookie(SESSION_COOKIE, "", 0) }
-    );
+    const session = await parseSession(request, env);
+    if (session?.jti) {
+      await env.DB.prepare("UPDATE admin_sessions SET revoked_at=? WHERE jti=? AND revoked_at IS NULL")
+        .bind(now(), session.jti).run();
+    }
+    return json({ ok: true }, 200, { "Set-Cookie": cookie(SESSION_COOKIE, "", 0) });
   }
 
   if (path === "/api/auth/me" && method === "GET") {
@@ -423,7 +448,7 @@ async function handleApi(request, env, ctx, parts) {
   }
 
   if (path === "/api/health" && method === "GET") {
-    return json({ ok: true, version: VERSION, database: Boolean(env.DB), session_secret: Boolean(env.SESSION_SECRET) });
+    return json({ ok: true, version: getVersion(env) });
   }
 
   if (path === "/api/public/bootstrap" && method === "GET") {
@@ -776,6 +801,31 @@ async function handleApi(request, env, ctx, parts) {
     return json({ ok: true });
   }
 
+  if (path === "/api/admin/navigation/bulk" && method === "POST") {
+    const data = await body(request);
+    if (!Array.isArray(data.ids) || data.ids.length < 1 || data.ids.length > 500) {
+      return json({ error: "请选择 1-500 个导航项目" }, 400);
+    }
+    const ids = data.ids.map(Number);
+    if (ids.some((id) => !Number.isInteger(id) || id <= 0) || new Set(ids).size !== ids.length) {
+      return json({ error: "导航 ID 列表无效" }, 400);
+    }
+    const action = data.action;
+    if (!['enable', 'disable', 'delete'].includes(action)) {
+      return json({ error: "批量操作无效" }, 400);
+    }
+    const placeholders = ids.map(() => '?').join(',');
+    const existing = await env.DB.prepare(`SELECT id FROM navigation WHERE id IN (${placeholders})`).bind(...ids).all();
+    if (existing.results.length !== ids.length) return json({ error: "部分导航项目不存在，请刷新后重试" }, 409);
+    const timestamp = now();
+    const statements = action === 'delete'
+      ? [env.DB.prepare(`DELETE FROM navigation WHERE id IN (${placeholders})`).bind(...ids)]
+      : [env.DB.prepare(`UPDATE navigation SET enabled=?,updated_at=? WHERE id IN (${placeholders})`).bind(action === 'enable' ? 1 : 0, timestamp, ...ids)];
+    await env.DB.batch(statements);
+    invalidatePublicCache(request, ctx);
+    return json({ ok: true, count: ids.length });
+  }
+
   if (path === "/api/admin/navigation/reorder" && method === "POST") {
     const data = await body(request);
     if (!Array.isArray(data.ids) || data.ids.some((id) => !Number.isInteger(Number(id)))) {
@@ -860,15 +910,16 @@ async function handleApi(request, env, ctx, parts) {
 
   if (path === "/api/admin/settings" && method === "PUT") {
     const data = await body(request);
-    const statements = ALLOWED_SETTINGS
-      .filter((key) => key in data)
-      .map((key) =>
-        env.DB.prepare(
-          `INSERT INTO settings(key,value) VALUES(?,?)
-           ON CONFLICT(key) DO UPDATE SET value=excluded.value`
-        ).bind(key, clean(data[key], 500))
-      );
-
+    const statements = [];
+    for (const key of ALLOWED_SETTINGS) {
+      if (!(key in data)) continue;
+      const value = validateSetting(key, data[key]);
+      if (value === null) return json({ error: `设置 ${key} 的值无效` }, 400);
+      statements.push(env.DB.prepare(
+        `INSERT INTO settings(key,value) VALUES(?,?)
+         ON CONFLICT(key) DO UPDATE SET value=excluded.value`
+      ).bind(key, value));
+    }
     if (statements.length) await env.DB.batch(statements);
     invalidatePublicCache(request, ctx);
     return json({ ok: true });
@@ -952,6 +1003,7 @@ export default {
       const assetResponse = await env.ASSETS.fetch(request);
       const headers = new Headers(assetResponse.headers);
       Object.entries(SECURITY_HEADERS).forEach(([key, value]) => headers.set(key, value));
+      if (url.pathname === "/admin.html") headers.set("cache-control", "no-store");
       return new Response(assetResponse.body, { status: assetResponse.status, statusText: assetResponse.statusText, headers });
     } catch (error) {
       if (error instanceof RequestError) {

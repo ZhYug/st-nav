@@ -363,6 +363,15 @@ function renderNav() {
   const filtered = items.length !== A.nav.length;
   $("#navCount").innerHTML = (filtered ? `${items.length} / ${A.nav.length} 项` : `${A.nav.length} 项`) + (A.navDirty ? '<span class="nav-dirty">未保存</span>' : '');
   $("#navFilterHint").classList.toggle("hidden", !filtered);
+  const saveButton = $("#saveNavOrder");
+  saveButton.disabled = filtered || !A.navDirty;
+  saveButton.title = filtered ? "清除筛选后才能保存排序" : (A.navDirty ? "保存当前排序" : "没有待保存的排序");
+  const selectedCount = A.navSelected.size;
+  $("#navSelectedCount").textContent = selectedCount ? `已选择 ${selectedCount} 项` : "未选择";
+  ["enableSelectedNav", "disableSelectedNav", "deleteSelectedNav", "clearSelectedNav"].forEach((id) => {
+    const button = $("#" + id);
+    if (button) button.disabled = selectedCount === 0;
+  });
   element.innerHTML = items.map((item) => `
     <div class="admin-nav-card ${A.navSelected.has(item.id) ? "selected" : ""}" draggable="true" data-id="${item.id}">
       <div class="admin-nav-head">
@@ -465,17 +474,18 @@ $("#clearNavFilter").onclick = () => {
 };
 
 $("#saveNavOrder").onclick = async () => {
-  const ids = [...document.querySelectorAll(".admin-nav-card")].map((node) => Number(node.dataset.id));
+  if (!A.navDirty || $("#navSearch")?.value || $("#navCategoryFilter")?.value) return;
+  const ids = A.nav.map((item) => Number(item.id));
   try { await api("/api/admin/navigation/reorder", { method: "POST", body: JSON.stringify({ ids }) }); A.navDirty = false; toast("排序已保存"); await loadAll(); }
   catch (error) { toast(error.message); }
 };
 
 async function updateSelectedNav(enabled) {
-  const selected = A.nav.filter((item) => A.navSelected.has(Number(item.id)));
-  if (!selected.length) return toast("请先选择导航项目");
+  const ids = A.nav.filter((item) => A.navSelected.has(Number(item.id))).map((item) => Number(item.id));
+  if (!ids.length) return toast("请先选择导航项目");
   try {
-    await Promise.all(selected.map((item) => api(`/api/admin/navigation/${item.id}`, { method: "PUT", body: JSON.stringify({ title: item.title, category: item.category || "", url: item.url, description: item.description || "", icon: item.icon || "", enabled }) })));
-    toast(enabled ? `已启用 ${selected.length} 项` : `已停用 ${selected.length} 项`);
+    const data = await api("/api/admin/navigation/bulk", { method: "POST", body: JSON.stringify({ ids, action: enabled ? "enable" : "disable" }) });
+    toast(enabled ? `已启用 ${data.count || ids.length} 项` : `已停用 ${data.count || ids.length} 项`);
     await loadAll();
   } catch (error) { toast(error.message); }
 }
@@ -485,12 +495,12 @@ $("#clearSelectedNav").onclick = () => { A.navSelected.clear(); renderNav(); };
 $("#enableSelectedNav").onclick = () => updateSelectedNav(true);
 $("#disableSelectedNav").onclick = () => updateSelectedNav(false);
 $("#deleteSelectedNav").onclick = async () => {
-  const selected = A.nav.filter((item) => A.navSelected.has(Number(item.id)));
-  if (!selected.length) return toast("请先选择导航项目");
-  if (!confirm(`确定删除选中的 ${selected.length} 个导航项目吗？此操作不可撤销。`)) return;
+  const ids = A.nav.filter((item) => A.navSelected.has(Number(item.id))).map((item) => Number(item.id));
+  if (!ids.length) return toast("请先选择导航项目");
+  if (!confirm(`确定删除选中的 ${ids.length} 个导航项目吗？此操作不可撤销。`)) return;
   try {
-    await Promise.all(selected.map((item) => api(`/api/admin/navigation/${item.id}`, { method: "DELETE" })));
-    toast(`已删除 ${selected.length} 项`);
+    const data = await api("/api/admin/navigation/bulk", { method: "POST", body: JSON.stringify({ ids, action: "delete" }) });
+    toast(`已删除 ${data.count || ids.length} 项`);
     await loadAll();
   } catch (error) { toast(error.message); }
 };
