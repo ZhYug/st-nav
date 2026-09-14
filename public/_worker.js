@@ -1,5 +1,5 @@
 
-const VERSION = "1.2.1";
+const VERSION = "1.2.2";
 const getVersion = (env) => String(env.ST_NAV_VERSION || VERSION);
 const SESSION_COOKIE = "__Host-stnav_session";
 const SESSION_TTL = 86400;
@@ -478,7 +478,7 @@ async function handleFavicon(request, env, ctx) {
     if (cached) return cached;
   }
   try {
-    const response = await fetch(target.toString(), { headers: { "User-Agent": "ST-Nav-Favicon/1.2.1" }, redirect: "manual" });
+    const response = await fetch(target.toString(), { headers: { "User-Agent": "ST-Nav-Favicon/1.2.2" }, redirect: "manual" });
     const contentType = response.headers.get("content-type") || "";
     if (!response.ok || (!contentType.startsWith("image/") && !contentType.includes("icon"))) {
       return new Response("", { status: 404, headers: SECURITY_HEADERS });

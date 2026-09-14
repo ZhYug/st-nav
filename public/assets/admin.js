@@ -311,7 +311,7 @@ function fallbackIcon(item) {
 
 function navIcon(item) { return item.icon || item.favicon_url || iconUrl(item.link_url || item.url); }
 
-function navFilteredItems() { return A.nav; }
+function navFilteredItems() { return Array.isArray(A.nav) ? A.nav : []; }
 function currentNavFilterPayload() {
   return {
     q: $("#navSearch")?.value.trim() || "",
@@ -350,7 +350,7 @@ function renderNav() {
   $("#navFilterHint").textContent = "分页模式下使用 ↑ / ↓ 调整全局顺序，无需保存。";
   $("#saveNavOrder").disabled = true;
   $("#saveNavOrder").title = "分页模式使用卡片上的 ↑ / ↓ 直接保存";
-  const selectedCount = A.navSelected.size;
+  const selectedCount = A.navSelectionAll ? Number(meta.total || 0) : A.navSelected.size;
   $("#navSelectedCount").textContent = selectedCount ? `已选择 ${selectedCount} 项` : "未选择";
   ["enableSelectedNav", "disableSelectedNav", "deleteSelectedNav", "clearSelectedNav"].forEach((id) => {
     const button = $("#" + id);

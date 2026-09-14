@@ -9,8 +9,8 @@ const html = read("public/admin.html");
 const pkg = JSON.parse(read("package.json"));
 
 const checks = [
-  [pkg.version === "1.2.1", "package version is 1.2.1"],
-  [worker.includes('const VERSION = "1.2.1"'), "worker version is 1.2.1"],
+  [pkg.version === "1.2.2", "package version is 1.2.2"],
+  [worker.includes('const VERSION = "1.2.2"'), "worker version is 1.2.2"],
   [worker.includes('/api/admin/links/export'), "full CSV export endpoint exists"],
   [worker.includes('text/csv'), "server-side CSV import exists"],
   [worker.includes('/api/admin/navigation/normalize'), "navigation normalize endpoint exists"],

@@ -813,3 +813,65 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
 .admin-pagination{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 2px;color:var(--faint);font-size:11px}
 .admin-pagination>div{display:flex;gap:6px}.admin-pagination .small-btn{min-height:30px;padding:4px 9px}
 @media(max-width:600px){.admin-pagination{padding:8px 0;font-size:10px}.admin-pagination .small-btn{min-height:34px}.admin-page .nav-filter-hint{margin:5px 0 8px}}
+
+/* v1.2.2 — admin navigation mobile visibility hardening */
+.admin-page #navAdminGrid {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  visibility: visible;
+}
+.admin-page #navAdminGrid > .admin-nav-card {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  visibility: visible;
+  opacity: 1;
+}
+@media (max-width: 600px) {
+  .admin-page #section-navigation {
+    width: 100%;
+    min-width: 0;
+    overflow: visible;
+  }
+  .admin-page #navAdminGrid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 10px 0 0;
+  }
+  .admin-page #navAdminGrid > .admin-nav-card {
+    display: block !important;
+    position: relative;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 170px;
+    box-sizing: border-box;
+    overflow: hidden;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  .admin-page #navAdminGrid > .admin-nav-card .admin-nav-head {
+    display: flex !important;
+    align-items: center;
+    min-height: 44px;
+  }
+  .admin-page #navAdminGrid > .admin-nav-card .admin-nav-title {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .admin-page #navAdminGrid > .admin-nav-card .nav-admin-meta {
+    display: flex !important;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+  }
+  .admin-page #navAdminGrid > .admin-nav-card .nav-url {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
