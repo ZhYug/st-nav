@@ -913,3 +913,7 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
   .public-page .nav-category-section{margin-bottom:22px}
   .public-page .nav-category-heading{font-size:15px;margin-bottom:9px}
 }
+
+/* CSV import: keep the native file input in the DOM and focusable; do not use display:none. */
+.csv-file-input{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important;opacity:0!important}
+.csv-file-input:focus-visible + *{outline:2px solid var(--primary)}

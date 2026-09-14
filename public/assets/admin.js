@@ -525,7 +525,11 @@ $("#exportLinks").onclick = () => {
   URL.revokeObjectURL(link.href);
 };
 
-$("#importLinksBtn").onclick = () => $("#csvFile").click();
+$("#importLinksBtn").onclick = () => {
+  const input = $("#csvFile");
+  input.value = "";
+  input.click();
+};
 $("#csvFile").onchange = async (event) => {
   const file = event.target.files[0];
   if (!file) return;
