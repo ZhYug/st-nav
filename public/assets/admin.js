@@ -66,7 +66,7 @@ function switchSection(section) {
   $("#section-" + section).classList.remove("hidden");
   const map = {
     overview: ["OVERVIEW", "控制台"],
-    links: ["SHORT LINKS", "短链接"],
+    links: ["SHORT LINKS", "短链接管理"],
     navigation: ["NAVIGATION", "导航管理"],
     settings: ["SETTINGS", "系统设置"],
   };
