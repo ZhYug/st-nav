@@ -3,7 +3,7 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 }[c]));
 
-const A = { links: [], nav: [], settings: {}, navSelected: new Set(), navDirty: false, linksMeta: { page: 1, pageSize: 50, total: 0, totalPages: 1 }, navMeta: { page: 1, pageSize: 50, total: 0, totalPages: 1 }, navCategories: [] };
+const A = { links: [], nav: [], settings: {}, navSelected: new Set(), navSelectionAll: false, navDirty: false, linksMeta: { page: 1, pageSize: 50, total: 0, totalPages: 1 }, navMeta: { page: 1, pageSize: 50, total: 0, totalPages: 1 }, navCategories: [] };
 let searchTimer = null;
 
 async function api(url, options = {}) {
@@ -87,6 +87,7 @@ async function loadAll() {
     const data = await api("/api/admin/bootstrap");
     A.settings = data.settings || {};
     A.navSelected = new Set();
+    A.navSelectionAll = false;
     A.navDirty = false;
     renderDashboard(data.dashboard || {});
     fillSettings();
@@ -311,6 +312,12 @@ function fallbackIcon(item) {
 function navIcon(item) { return item.icon || item.favicon_url || iconUrl(item.link_url || item.url); }
 
 function navFilteredItems() { return A.nav; }
+function currentNavFilterPayload() {
+  return {
+    q: $("#navSearch")?.value.trim() || "",
+    category: $("#navCategoryFilter")?.value || "",
+  };
+}
 
 function refreshNavFilters() {
   const select = $("#navCategoryFilter");
@@ -404,6 +411,7 @@ $("#navAdminGrid").onclick = async (event) => {
   if (button.dataset.navact === "select") {
     const id = Number(button.dataset.id);
     if (button.checked) A.navSelected.add(id); else A.navSelected.delete(id);
+    A.navSelectionAll = false;
     renderNav();
     return;
   }
@@ -425,20 +433,46 @@ $("#clearNavFilter").onclick = () => { $("#navSearch").value = ""; $("#navCatego
 
 $("#saveNavOrder").onclick = () => toast("分页模式下，使用卡片上的 ↑ / ↓ 直接保存顺序");
 
-async function updateSelectedNav(enabled) {
+async function updateSelectedNav(enabled, all = false) {
+  const useAll = all || A.navSelectionAll;
   const ids = A.nav.filter((item) => A.navSelected.has(Number(item.id))).map((item) => Number(item.id));
-  if (!ids.length) return toast("请先选择导航项目");
+  if (!useAll && !ids.length) return toast("请先选择导航项目");
+  const payload = useAll ? { ...currentNavFilterPayload(), all: true, action: enabled ? "enable" : "disable" } : { ids, action: enabled ? "enable" : "disable" };
   try {
-    const data = await api("/api/admin/navigation/bulk", { method: "POST", body: JSON.stringify({ ids, action: enabled ? "enable" : "disable" }) });
-    toast(enabled ? `已启用 ${data.count || ids.length} 项` : `已停用 ${data.count || ids.length} 项`);
+    const data = await api("/api/admin/navigation/bulk", { method: "POST", body: JSON.stringify(payload) });
+    toast(enabled ? `已启用 ${data.count || 0} 项` : `已停用 ${data.count || 0} 项`);
+    A.navSelected.clear();
+    A.navSelectionAll = false;
     await loadNavPage(A.navMeta.page);
   } catch (error) { toast(error.message); }
 }
 
-$("#selectAllNav").onclick = () => { navFilteredItems().forEach((item) => A.navSelected.add(Number(item.id))); renderNav(); };
-$("#clearSelectedNav").onclick = () => { A.navSelected.clear(); renderNav(); };
+$("#selectAllNav").onclick = () => {
+  A.navSelectionAll = false;
+  navFilteredItems().forEach((item) => A.navSelected.add(Number(item.id)));
+  renderNav();
+};
+$("#selectAllNavResults").onclick = async () => {
+  try {
+    const filter = currentNavFilterPayload();
+    const data = await api(`/api/admin/navigation?page=1&pageSize=100&q=${encodeURIComponent(filter.q)}&category=${encodeURIComponent(filter.category)}`);
+    // Fetch all matching IDs without changing the current page.
+    const pages = Math.ceil(Number(data.total || 0) / 100);
+    A.navSelected.clear();
+    A.navSelectionAll = Number(data.total || 0) > 0;
+    for (let page = 1; page <= pages; page++) {
+      const pageData = page === 1 ? data : await api(`/api/admin/navigation?page=${page}&pageSize=100&q=${encodeURIComponent(filter.q)}&category=${encodeURIComponent(filter.category)}`);
+      (pageData.items || []).forEach((item) => A.navSelected.add(Number(item.id)));
+    }
+    renderNav();
+    toast(`已选择全部 ${A.navSelected.size} 项`);
+  } catch (error) { toast(error.message); }
+};
+$("#clearSelectedNav").onclick = () => { A.navSelected.clear(); A.navSelectionAll = false; renderNav(); };
 $("#enableSelectedNav").onclick = () => updateSelectedNav(true);
 $("#disableSelectedNav").onclick = () => updateSelectedNav(false);
+$("#enableAllNav").onclick = () => updateSelectedNav(true, true);
+$("#disableAllNav").onclick = () => updateSelectedNav(false, true);
 $("#deleteSelectedNav").onclick = async () => {
   const ids = A.nav.filter((item) => A.navSelected.has(Number(item.id))).map((item) => Number(item.id));
   if (!ids.length) return toast("请先选择导航项目");
@@ -446,6 +480,16 @@ $("#deleteSelectedNav").onclick = async () => {
   try {
     const data = await api("/api/admin/navigation/bulk", { method: "POST", body: JSON.stringify({ ids, action: "delete" }) });
     toast(`已删除 ${data.count || ids.length} 项`);
+    A.navSelected.clear();
+    A.navSelectionAll = false;
+    await loadNavPage(A.navMeta.page);
+  } catch (error) { toast(error.message); }
+};
+$("#normalizeNavOrder").onclick = async () => {
+  if (!confirm("将按当前全局顺序重新整理编号，确定继续吗？")) return;
+  try {
+    const data = await api("/api/admin/navigation/normalize", { method: "POST" });
+    toast(`排序已整理，共 ${data.count || 0} 项`);
     await loadNavPage(A.navMeta.page);
   } catch (error) { toast(error.message); }
 };
@@ -516,14 +560,26 @@ function closeModal() { $("#modal").classList.add("hidden"); }
 document.querySelectorAll("[data-close-modal]").forEach((node) => node.onclick = closeModal);
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
 
-$("#exportLinks").onclick = () => {
-  const headers = ["code", "url", "title", "description", "category", "enabled"];
-  const csv = [headers.join(","), ...A.links.map((item) => headers.map((key) => `"${String(item[key] ?? "").replaceAll('"', '""')}"`).join(","))].join("\n");
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
-  link.download = "shortlinks.csv";
-  link.click();
-  URL.revokeObjectURL(link.href);
+$("#exportLinks").onclick = async () => {
+  const q = ($( "#linkSearch")?.value || "").trim();
+  const button = $("#exportLinks");
+  const original = button.textContent;
+  button.disabled = true; button.textContent = "导出中…";
+  try {
+    const response = await fetch(`/api/admin/links/export?q=${encodeURIComponent(q)}`, { credentials: "same-origin" });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || "导出失败");
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = "shortlinks.csv";
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast(q ? "当前搜索结果已完整导出" : "全部短链接已完整导出");
+  } catch (error) { toast(error.message); }
+  finally { button.disabled = false; button.textContent = original; }
 };
 
 $("#importLinksBtn").onclick = () => $("#csvFile").click();
@@ -536,26 +592,14 @@ $("#csvFile").onchange = async (event) => {
     const lines = text.replace(/^\ufeff/, "").split(/\r?\n/).filter(Boolean);
     if (lines.length < 2) throw new Error("CSV 没有数据");
     if (lines.length - 1 > 1000) throw new Error("CSV 最多支持 1000 条记录");
-    const parseCsvLine = (line) => {
-      const values = []; let current = "", quoted = false;
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"' && line[i + 1] === '"') { current += '"'; i++; }
-        else if (char === '"') quoted = !quoted;
-        else if (char === "," && !quoted) { values.push(current); current = ""; }
-        else current += char;
-      }
-      values.push(current); return values;
-    };
-    const headers = parseCsvLine(lines[0]).map((x) => x.trim().toLowerCase());
-    const allowed = new Set(["code", "url", "title", "description", "category", "enabled"]);
-    const rows = lines.slice(1).map((line) => {
-      const values = parseCsvLine(line), data = {};
-      headers.forEach((key, index) => { if (allowed.has(key)) data[key] = values[index] || ""; });
-      data.enabled = data.enabled !== "false";
+    const result = await fetch("/api/admin/links/import", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "text/csv;charset=utf-8" }, body: text,
+    }).then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "导入失败");
       return data;
     });
-    const result = await api("/api/admin/links/import", { method: "POST", body: JSON.stringify({ rows }) });
     toast(`导入完成：成功 ${result.success}，失败 ${result.failed}`);
     if (result.failed) console.warn("CSV import errors", result.errors);
     event.target.value = "";

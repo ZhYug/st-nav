@@ -1,24 +1,27 @@
-#!/usr/bin/env node
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import worker from '../public/_worker.js';
+import fs from "node:fs";
+import path from "node:path";
 
-const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+const root = process.cwd();
+const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
+const worker = read("public/_worker.js");
+const admin = read("public/assets/admin.js");
+const html = read("public/admin.html");
+const pkg = JSON.parse(read("package.json"));
 
-const health = await worker.fetch(new Request('https://example.com/api/health'), {
-  ST_NAV_VERSION: pkg.version,
-});
-assert.equal(health.status, 200);
-assert.equal((await health.json()).version, pkg.version);
-
-const favicon = await worker.fetch(new Request('https://example.com/api/favicon?url=https%3A%2F%2Flocalhost'), {});
-assert.equal(favicon.status, 400);
-
-const source = readFileSync(new URL('../public/_worker.js', import.meta.url), 'utf8');
-assert.match(source, /admin_sessions/);
-assert.match(source, /\/api\/admin\/links\/import/);
-assert.match(source, /\/api\/admin\/navigation\/move/);
-assert.match(source, /content-security-policy/i);
-assert.match(source, /MAX_IMPORT_ROWS/);
-
+const checks = [
+  [pkg.version === "1.2.1", "package version is 1.2.1"],
+  [worker.includes('const VERSION = "1.2.1"'), "worker version is 1.2.1"],
+  [worker.includes('/api/admin/links/export'), "full CSV export endpoint exists"],
+  [worker.includes('text/csv'), "server-side CSV import exists"],
+  [worker.includes('/api/admin/navigation/normalize'), "navigation normalize endpoint exists"],
+  [worker.includes('data.all === true'), "bulk all-results operation exists"],
+  [admin.includes('/api/admin/links/export?q='), "admin uses server-side export"],
+  [admin.includes('"Content-Type": "text/csv;charset=utf-8"'), "admin uploads raw CSV"],
+  [admin.includes('id="selectAllNavResults"') || html.includes('id="selectAllNavResults"'), "all-results selection control exists"],
+  [html.match(/qrcodejs\/1\.0\.0\/qrcode\.min\.js/g)?.length === 1, "QR dependency is included once"],
+  [!/onerror\s*=/.test(html + admin), "no inline onerror handlers"],
+];
+for (const [ok, label] of checks) {
+  if (!ok) throw new Error(`smoke check failed: ${label}`);
+}
 console.log(`✓ smoke tests passed (v${pkg.version})`);

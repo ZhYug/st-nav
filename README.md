@@ -1,4 +1,4 @@
-# ST Nav v1.2.0
+# ST Nav v1.2.1
 
 轻量级个人导航 + 短链接服务，运行在 **Cloudflare Pages Advanced Mode + D1**。
 
@@ -284,7 +284,7 @@ _worker.js
 - 导航管理桌面端进一步提高信息密度，减少空白并强化管理面板感。
 
 
-## v1.2.0 Audit follow-up
+## v1.2.1 Audit follow-up
 
 - Admin short links and navigation now use server-side pagination and search/filter queries.
 - Navigation ordering uses direct global ↑ / ↓ moves, so pagination no longer conflicts with sorting.

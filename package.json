@@ -1,7 +1,7 @@
 {
   "name": "st-nav",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "type": "module",
   "description": "ST Nav — Cloudflare Pages Advanced Mode + D1",
   "scripts": {

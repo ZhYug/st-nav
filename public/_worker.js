@@ -1,5 +1,5 @@
 
-const VERSION = "1.2.0";
+const VERSION = "1.2.1";
 const getVersion = (env) => String(env.ST_NAV_VERSION || VERSION);
 const SESSION_COOKIE = "__Host-stnav_session";
 const SESSION_TTL = 86400;
@@ -244,6 +244,38 @@ const MAX_JSON_BODY_BYTES = 1024 * 1024;
 const MAX_IMPORT_ROWS = 1000;
 const MAX_PAGE_SIZE = 100;
 
+async function textBody(request, maxBytes = MAX_JSON_BODY_BYTES) {
+  const length = Number(request.headers.get("content-length"));
+  if (Number.isFinite(length) && length > maxBytes) throw new RequestError("请求体过大", 413);
+  const text = await request.text();
+  if (new TextEncoder().encode(text).byteLength > maxBytes) throw new RequestError("请求体过大", 413);
+  return text;
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [], cell = "", quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { cell += '"'; i++; }
+        else quoted = false;
+      } else cell += ch;
+      continue;
+    }
+    if (ch === '"') quoted = true;
+    else if (ch === ',') { row.push(cell); cell = ""; }
+    else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ""; }
+    else if (ch !== '\r') cell += ch;
+  }
+  if (quoted) throw new RequestError("CSV 引号未闭合", 400);
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter((r) => r.some((v) => String(v).trim() !== ""));
+}
+
+function csvCell(value) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
+
 async function body(request, maxBytes = MAX_JSON_BODY_BYTES) {
   const length = Number(request.headers.get("content-length"));
   if (Number.isFinite(length) && length > maxBytes) {
@@ -446,7 +478,7 @@ async function handleFavicon(request, env, ctx) {
     if (cached) return cached;
   }
   try {
-    const response = await fetch(target.toString(), { headers: { "User-Agent": "ST-Nav-Favicon/1.2.0" }, redirect: "manual" });
+    const response = await fetch(target.toString(), { headers: { "User-Agent": "ST-Nav-Favicon/1.2.1" }, redirect: "manual" });
     const contentType = response.headers.get("content-type") || "";
     if (!response.ok || (!contentType.startsWith("image/") && !contentType.includes("icon"))) {
       return new Response("", { status: 404, headers: SECURITY_HEADERS });
@@ -602,14 +634,32 @@ async function handleApi(request, env, ctx, parts) {
   }
 
   if (path === "/api/admin/links/import" && method === "POST") {
-    const data = await body(request, 3 * 1024 * 1024);
-    if (!Array.isArray(data.rows) || !data.rows.length || data.rows.length > MAX_IMPORT_ROWS) {
+    const contentType = request.headers.get("content-type") || "";
+    let rows;
+    if (contentType.toLowerCase().includes("text/csv")) {
+      const text = (await textBody(request, 3 * 1024 * 1024)).replace(/^\ufeff/, "");
+      const parsed = parseCsv(text);
+      if (parsed.length < 2) return json({ error: "CSV 没有数据" }, 400);
+      if (parsed.length - 1 > MAX_IMPORT_ROWS) return json({ error: `导入记录最多 ${MAX_IMPORT_ROWS} 条` }, 400);
+      const headers = parsed[0].map((x) => String(x).trim().toLowerCase());
+      const allowed = new Set(["code", "url", "title", "description", "category", "enabled"]);
+      rows = parsed.slice(1).map((values) => {
+        const data = {};
+        headers.forEach((key, index) => { if (allowed.has(key)) data[key] = values[index] || ""; });
+        data.enabled = String(data.enabled ?? "true").trim().toLowerCase() !== "false";
+        return data;
+      });
+    } else {
+      const data = await body(request, 3 * 1024 * 1024);
+      rows = data.rows;
+    }
+    if (!Array.isArray(rows) || !rows.length || rows.length > MAX_IMPORT_ROWS) {
       return json({ error: `导入记录必须为 1-${MAX_IMPORT_ROWS} 条` }, 400);
     }
     let success = 0;
     const errors = [];
-    for (let index = 0; index < data.rows.length; index++) {
-      const row = data.rows[index] || {};
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index] || {};
       const url = clean(row.url, 2000);
       if (!validUrl(url)) { errors.push({ row: index + 2, error: "URL 必须是 http/https" }); continue; }
       let code = clean(row.code, 64);
@@ -632,6 +682,22 @@ async function handleApi(request, env, ctx, parts) {
     }
     invalidatePublicCache(request, ctx);
     return json({ ok: true, success, failed: errors.length, errors: errors.slice(0, 100) });
+  }
+
+  if (path === "/api/admin/links/export" && method === "GET") {
+    const urlObj = new URL(request.url);
+    const q = clean(urlObj.searchParams.get("q"), 120).toLowerCase();
+    const where = q ? "WHERE lower(code || ' ' || url || ' ' || COALESCE(title,'') || ' ' || COALESCE(category,'')) LIKE ?" : "";
+    const params = q ? [`%${q}%`] : [];
+    const rows = await env.DB.prepare(`SELECT code,url,title,description,category,enabled FROM links ${where} ORDER BY created_at DESC,id DESC`).bind(...params).all();
+    const headers = ["code", "url", "title", "description", "category", "enabled"];
+    const csv = [headers, ...rows.results.map((item) => headers.map((key) => item[key]))]
+      .map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const responseHeaders = new Headers(SECURITY_HEADERS);
+    responseHeaders.set("content-type", "text/csv;charset=utf-8");
+    responseHeaders.set("content-disposition", 'attachment; filename="shortlinks.csv"');
+    responseHeaders.set("cache-control", "no-store");
+    return new Response("\ufeff" + csv + "\r\n", { status: 200, headers: responseHeaders });
   }
 
   if (path === "/api/admin/links" && method === "GET") {
@@ -889,27 +955,50 @@ async function handleApi(request, env, ctx, parts) {
 
   if (path === "/api/admin/navigation/bulk" && method === "POST") {
     const data = await body(request);
-    if (!Array.isArray(data.ids) || data.ids.length < 1 || data.ids.length > 500) {
-      return json({ error: "请选择 1-500 个导航项目" }, 400);
-    }
-    const ids = data.ids.map(Number);
-    if (ids.some((id) => !Number.isInteger(id) || id <= 0) || new Set(ids).size !== ids.length) {
-      return json({ error: "导航 ID 列表无效" }, 400);
-    }
     const action = data.action;
-    if (!['enable', 'disable', 'delete'].includes(action)) {
-      return json({ error: "批量操作无效" }, 400);
+    if (!['enable', 'disable', 'delete'].includes(action)) return json({ error: "批量操作无效" }, 400);
+    const all = data.all === true;
+    let ids = [];
+    if (all) {
+      const q = clean(data.q, 120).toLowerCase();
+      const category = clean(data.category, 80);
+      const filters = [];
+      const params = [];
+      if (q) { filters.push("lower(navigation.title || ' ' || COALESCE(navigation.description,'') || ' ' || COALESCE(navigation.category,'') || ' ' || navigation.url || ' ' || COALESCE(links.url,'')) LIKE ?"); params.push(`%${q}%`); }
+      if (category) { filters.push("COALESCE(navigation.category,'未分类') = ?"); params.push(category); }
+      const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+      const rows = await env.DB.prepare(`SELECT navigation.id FROM navigation LEFT JOIN links ON navigation.link_id=links.id ${where}`).bind(...params).all();
+      ids = rows.results.map((row) => Number(row.id));
+      if (!ids.length) return json({ ok: true, count: 0 });
+    } else {
+      if (!Array.isArray(data.ids) || data.ids.length < 1 || data.ids.length > 500) return json({ error: "请选择 1-500 个导航项目" }, 400);
+      ids = data.ids.map(Number);
+      if (ids.some((id) => !Number.isInteger(id) || id <= 0) || new Set(ids).size !== ids.length) return json({ error: "导航 ID 列表无效" }, 400);
     }
-    const placeholders = ids.map(() => '?').join(',');
-    const existing = await env.DB.prepare(`SELECT id FROM navigation WHERE id IN (${placeholders})`).bind(...ids).all();
-    if (existing.results.length !== ids.length) return json({ error: "部分导航项目不存在，请刷新后重试" }, 409);
-    const timestamp = now();
-    const statements = action === 'delete'
-      ? [env.DB.prepare(`DELETE FROM navigation WHERE id IN (${placeholders})`).bind(...ids)]
-      : [env.DB.prepare(`UPDATE navigation SET enabled=?,updated_at=? WHERE id IN (${placeholders})`).bind(action === 'enable' ? 1 : 0, timestamp, ...ids)];
-    await env.DB.batch(statements);
+    if (ids.length > 500) {
+      // Avoid oversized SQL variable lists by operating in chunks.
+      for (let offset = 0; offset < ids.length; offset += 500) {
+        const chunk = ids.slice(offset, offset + 500), placeholders = chunk.map(() => '?').join(',');
+        if (action === 'delete') await env.DB.prepare(`DELETE FROM navigation WHERE id IN (${placeholders})`).bind(...chunk).run();
+        else await env.DB.prepare(`UPDATE navigation SET enabled=?,updated_at=? WHERE id IN (${placeholders})`).bind(action === 'enable' ? 1 : 0, now(), ...chunk).run();
+      }
+    } else {
+      const placeholders = ids.map(() => '?').join(',');
+      const existing = await env.DB.prepare(`SELECT id FROM navigation WHERE id IN (${placeholders})`).bind(...ids).all();
+      if (existing.results.length !== ids.length) return json({ error: "部分导航项目不存在，请刷新后重试" }, 409);
+      if (action === 'delete') await env.DB.prepare(`DELETE FROM navigation WHERE id IN (${placeholders})`).bind(...ids).run();
+      else await env.DB.prepare(`UPDATE navigation SET enabled=?,updated_at=? WHERE id IN (${placeholders})`).bind(action === 'enable' ? 1 : 0, now(), ...ids).run();
+    }
     invalidatePublicCache(request, ctx);
     return json({ ok: true, count: ids.length });
+  }
+
+  if (path === "/api/admin/navigation/normalize" && method === "POST") {
+    const rows = await env.DB.prepare("SELECT id FROM navigation ORDER BY sort_order,id").all();
+    const statements = rows.results.map((row, index) => env.DB.prepare("UPDATE navigation SET sort_order=?,updated_at=? WHERE id=?").bind(index, now(), row.id));
+    if (statements.length) await env.DB.batch(statements);
+    invalidatePublicCache(request, ctx);
+    return json({ ok: true, count: statements.length });
   }
 
   if (path === "/api/admin/navigation/move" && method === "POST") {
