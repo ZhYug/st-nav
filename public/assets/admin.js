@@ -161,7 +161,6 @@ function renderLinks() {
         <td data-label="操作">
           <div class="row-actions compact-actions">
             <button class="small-btn" data-act="nav" data-id="${item.id}" aria-label="${linked ? "已在导航" : "添加到导航"}" title="${linked ? "已在导航" : "添加到导航"}">${linked ? "✓" : "+"}</button>
-            <button class="small-btn qr-btn" data-act="qr" data-id="${item.id}" aria-label="二维码" title="二维码">QR</button>
             <button class="small-btn edit-btn" data-act="edit" data-id="${item.id}" aria-label="编辑" title="编辑">✎</button>
             <button class="small-btn danger-btn del-btn" data-act="del" data-id="${item.id}" aria-label="删除" title="删除">×</button>
           </div>
@@ -179,7 +178,6 @@ $("#linksTable").onclick = (event) => {
   if (!item) return;
   if (button.dataset.act === "edit") linkModal(item);
   if (button.dataset.act === "del") deleteLink(item);
-  if (button.dataset.act === "qr") qrModal(item);
   if (button.dataset.act === "nav") addLinkToNavigation(item);
 };
 
@@ -239,66 +237,6 @@ async function deleteLink(item) {
   catch (error) { toast(error.message); }
 }
 
-function qrModal(item) {
-  openModal(
-    "短链接二维码",
-    `
-    <div style="text-align:center">
-      <div class="qr-box">
-        <canvas id="qrCanvas"></canvas>
-      </div>
-      <strong>/${esc(item.code)}</strong>
-      <p style="color:var(--muted);word-break:break-all">
-        ${esc(location.origin + "/" + item.code)}
-      </p>
-      <button class="btn primary" id="downloadQr">
-        下载二维码
-      </button>
-    </div>
-    `
-  );
-
-  setTimeout(() => {
-    const canvas = document.getElementById("qrCanvas");
-
-    if (!canvas) {
-      toast("二维码容器不存在");
-      return;
-    }
-
-    if (typeof QRCode === "undefined") {
-      toast("二维码库未加载");
-      return;
-    }
-
-    QRCode.toCanvas(
-      canvas,
-      `${location.origin}/${item.code}`,
-      {
-        width:220,
-        margin:1
-      },
-      (error)=>{
-        if(error){
-          console.error("QRCode error:", error);
-          toast("二维码生成失败");
-        }
-      }
-    );
-
-    const btn = document.getElementById("downloadQr");
-
-    if(btn){
-      btn.onclick = ()=>{
-        const link=document.createElement("a");
-        link.href=canvas.toDataURL("image/png");
-        link.download=`${item.code}-qrcode.png`;
-        link.click();
-      };
-    }
-
-  },100);
-}
 
 $("#addLinkBtn").onclick = () => linkModal();
 $("#addNavBtn").onclick = () => navModal();
