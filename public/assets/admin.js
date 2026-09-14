@@ -1,6 +1,6 @@
 const A = {
   links: [], nav: [], settings: {}, navSelected: new Set(), navDirty: false,
-  linkPage: 1, navPage: 1, linkPageSize: 10, navPageSize: 12,
+  linkPage: 1, navPage: 1, linkPageSize: Number(localStorage.getItem("stnav_link_page_size")) || 10, navPageSize: Number(localStorage.getItem("stnav_nav_page_size")) || 12,
 };
 
 function toast(message) {
@@ -146,11 +146,7 @@ function renderPagination(container, page, total, pageSize, onChange) {
   if (!node) return;
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const current = Math.min(Math.max(1, page), pages);
-  if (total <= pageSize) {
-    node.innerHTML = "";
-    return;
-  }
-  const start = Math.max(1, current - 2);
+  const start = Math.max(1, Math.min(current - 2, pages - 4));
   const end = Math.min(pages, start + 4);
   const pageButtons = [];
   for (let p = start; p <= end; p++) {
@@ -159,6 +155,9 @@ function renderPagination(container, page, total, pageSize, onChange) {
   node.innerHTML = `
     <span class="pagination-info">共 ${total} 项，第 ${current}/${pages} 页</span>
     <div class="pagination-actions">
+      <label class="page-size-label">每页 <select class="page-size-select">
+        ${[5,10,20,50].map((size) => `<option value="${size}" ${size === pageSize ? "selected" : ""}>${size}</option>`).join("")}
+      </select> 项</label>
       <button class="page-btn" data-page="${current - 1}" ${current <= 1 ? "disabled" : ""}>上一页</button>
       ${pageButtons.join("")}
       <button class="page-btn" data-page="${current + 1}" ${current >= pages ? "disabled" : ""}>下一页</button>
@@ -169,6 +168,14 @@ function renderPagination(container, page, total, pageSize, onChange) {
       if (target >= 1 && target <= pages && target !== current) onChange(target);
     };
   });
+  const sizeSelect = node.querySelector(".page-size-select");
+  if (sizeSelect) {
+    sizeSelect.onchange = () => {
+      const size = Number(sizeSelect.value);
+      if (!Number.isFinite(size) || size < 1) return;
+      onChange(1, size);
+    };
+  }
 }
 
 function renderLinks() {
@@ -199,8 +206,9 @@ function renderLinks() {
       </tr>`;
   }).join("") || '<tr><td colspan="6" style="text-align:center;padding:30px">暂无短链接</td></tr>';
 
-  renderPagination("#linksPagination", A.linkPage, rows.length, A.linkPageSize, (page) => {
+  renderPagination("#linksPagination", A.linkPage, rows.length, A.linkPageSize, (page, pageSize) => {
     A.linkPage = page;
+    if (pageSize) { A.linkPageSize = pageSize; localStorage.setItem("stnav_link_page_size", String(pageSize)); }
     renderLinks();
   });
 }
@@ -329,8 +337,9 @@ function renderNav() {
       </div>
     </div>
   `).join("") || '<div class="panel" style="padding:30px">暂无导航</div>';
-  renderPagination("#navPagination", A.navPage, items.length, A.navPageSize, (page) => {
+  renderPagination("#navPagination", A.navPage, items.length, A.navPageSize, (page, pageSize) => {
     A.navPage = page;
+    if (pageSize) { A.navPageSize = pageSize; localStorage.setItem("stnav_nav_page_size", String(pageSize)); }
     renderNav();
   });
   bindDrag();

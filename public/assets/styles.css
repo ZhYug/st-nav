@@ -875,3 +875,5 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
   .settings-group>div:first-child,.settings-two{grid-column:auto}
   .settings-two{grid-template-columns:repeat(2,1fr)}
 }
+
+.page-size-label{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;color:var(--faint)}.page-size-select{height:32px;padding:0 7px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--muted);outline:0}
