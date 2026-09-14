@@ -877,3 +877,39 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
 }
 
 .page-size-label{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;color:var(--faint)}.page-size-select{height:32px;padding:0 7px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--muted);outline:0}
+
+/* Public home: stable grid + working pagination */
+.public-page .public-main{min-width:0;overflow:visible}
+.public-page .toolbar{min-width:0}
+.public-page .chips{min-width:0;flex:1 1 auto}
+.public-page .nav-grid,.public-page .nav-grid-section{min-width:0;align-items:stretch}
+.public-page .nav-card{min-width:0;height:100%}
+.public-page .nav-card-content{min-width:0}
+.public-page .nav-card h3,.public-page .nav-card p{overflow-wrap:anywhere}
+.public-page .nav-category-section{min-width:0}
+.public-pagination{margin-top:18px;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.025);backdrop-filter:blur(16px)}
+.public-pagination:empty{display:none}
+.public-pagination .pagination-summary{white-space:nowrap}
+.public-pagination .pagination-actions{justify-content:flex-end}
+.public-pagination .page-ellipsis{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:32px;color:var(--faint)}
+@media(max-width:900px){
+  .public-page .nav-grid,.public-page .nav-grid-section{gap:12px}
+  .public-page .hero{max-width:none}
+}
+@media(max-width:600px){
+  .public-page .toolbar{align-items:stretch;gap:8px}
+  .public-page .chips{overflow-x:auto;max-width:100%;padding-right:2px}
+  .public-page .nav-grid,.public-page .nav-grid-section{grid-template-columns:repeat(var(--nav-columns-mobile),minmax(0,1fr));gap:9px}
+  .public-page .nav-card{min-height:156px;padding:12px}
+  .public-page .nav-card h3{font-size:13px;margin-top:12px}
+  .public-page .nav-card p{font-size:11px}
+  .public-page .public-pagination{margin-top:14px;padding:10px 11px}
+  .public-page .public-pagination .pagination-summary{font-size:11px}
+  .public-page .public-pagination .pagination-actions{width:100%;justify-content:flex-start}
+  .public-page .public-pagination .page-btn{height:34px;min-width:34px;padding:0 8px}
+  .public-page .public-pagination .page-btn[data-page="1"]{display:none}
+  .public-page .public-pagination .page-ellipsis{display:none}
+  .public-page .public-pagination .page-size-label{margin-right:auto}
+  .public-page .nav-category-section{margin-bottom:22px}
+  .public-page .nav-category-heading{font-size:15px;margin-bottom:9px}
+}

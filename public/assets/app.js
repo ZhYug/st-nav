@@ -5,6 +5,8 @@ const state = {
   favoritesOnly: false,
   recent: readList("sln_recent"),
   favorites: readList("sln_favorites"),
+  page: 1,
+  pageSize: Number(localStorage.getItem("sln_page_size")) || 12,
 };
 
 let searchFrame = 0;
@@ -112,6 +114,7 @@ function renderCats() {
   document.querySelectorAll("[data-cat]").forEach((button) => {
     button.onclick = () => {
       state.category = button.dataset.cat;
+      state.page = 1;
       renderCats();
       render();
     };
@@ -155,15 +158,19 @@ function cardHtml(item, index) {
 
 function render() {
   const list = filtered();
+  const totalPages = Math.max(1, Math.ceil(list.length / state.pageSize));
+  state.page = Math.min(Math.max(1, state.page), totalPages);
+  const start = (state.page - 1) * state.pageSize;
+  const pageItems = list.slice(start, start + state.pageSize);
   const style = document.documentElement.dataset.navTagStyle || "pills";
 
   if (style === "sections" && state.category === "全部") {
     const groups = categoryList();
     const grouped = groups.map((category) => ({
       category,
-      items: list.filter((item) => item.category === category),
+      items: pageItems.filter((item) => item.category === category),
     })).filter((group) => group.items.length);
-    const uncategorized = list.filter((item) => !item.category);
+    const uncategorized = pageItems.filter((item) => !item.category);
     $("#navGrid").innerHTML = grouped.map((group) => `
       <section class="nav-category-section">
         <div class="nav-category-heading"><span>${esc(group.category)}</span><b>${group.items.length}</b></div>
@@ -173,12 +180,57 @@ function render() {
       <section class="nav-category-section"><div class="nav-category-heading"><span>未分类</span><b>${uncategorized.length}</b></div><div class="nav-grid-section">${uncategorized.map((item, index) => cardHtml(item, index)).join("")}</div></section>
     ` : "");
   } else {
-    $("#navGrid").innerHTML = list.map(cardHtml).join("");
+    $("#navGrid").innerHTML = pageItems.map(cardHtml).join("");
   }
 
   $("#emptyState").classList.toggle("hidden", list.length > 0);
-
+  renderPagination(list.length, totalPages);
   bindGridEvents();
+}
+
+function renderPagination(total, totalPages) {
+  const root = $("#pagination");
+  if (!root) return;
+  const from = total ? (state.page - 1) * state.pageSize + 1 : 0;
+  const to = Math.min(state.page * state.pageSize, total);
+  const pages = [];
+  const addPage = (page) => pages.push(`<button class="page-btn ${page === state.page ? "active" : ""}" data-page="${page}" ${page === state.page ? "aria-current=\"page\"" : ""}>${page}</button>`);
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) addPage(i);
+  } else {
+    addPage(1);
+    if (state.page > 4) pages.push('<span class="page-ellipsis">…</span>');
+    const startPage = Math.max(2, state.page - 1);
+    const endPage = Math.min(totalPages - 1, state.page + 1);
+    for (let i = startPage; i <= endPage; i++) addPage(i);
+    if (state.page < totalPages - 3) pages.push('<span class="page-ellipsis">…</span>');
+    addPage(totalPages);
+  }
+  root.innerHTML = `
+    <div class="pagination-summary">显示 ${from}-${to} / 共 ${total} 项</div>
+    <div class="pagination-actions">
+      <label class="page-size-label">每页 <select class="page-size-select" id="pageSizeSelect"><option value="8">8</option><option value="12">12</option><option value="20">20</option><option value="32">32</option></select> 项</label>
+      <button class="page-btn" data-page="${state.page - 1}" ${state.page <= 1 ? "disabled" : ""}>上一页</button>
+      ${pages.join("")}
+      <button class="page-btn" data-page="${state.page + 1}" ${state.page >= totalPages ? "disabled" : ""}>下一页</button>
+    </div>`;
+  const select = $("#pageSizeSelect");
+  select.value = String(state.pageSize);
+  select.onchange = () => {
+    state.pageSize = Number(select.value) || 12;
+    localStorage.setItem("sln_page_size", String(state.pageSize));
+    state.page = 1;
+    render();
+  };
+  root.querySelectorAll("[data-page]").forEach((button) => {
+    button.onclick = () => {
+      const page = Number(button.dataset.page);
+      if (!Number.isFinite(page) || page < 1 || page > totalPages || page === state.page) return;
+      state.page = page;
+      render();
+      $("#navGrid").scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+  });
 }
 
 function bindGridEvents() {
@@ -226,9 +278,10 @@ function renderRecent() {
     : '<span style="color:var(--faint);font-size:13px">还没有访问记录</span>';
 }
 
-$("#searchInput").oninput = scheduleRender;
+$("#searchInput").oninput = () => { state.page = 1; scheduleRender(); };
 $("#favoritesOnly").onclick = () => {
   state.favoritesOnly = !state.favoritesOnly;
+  state.page = 1;
   $("#favoritesOnly").textContent = state.favoritesOnly ? "★ 已收藏" : "☆ 收藏";
   render();
 };
@@ -237,6 +290,7 @@ $("#clearFilters").onclick = () => {
   $("#searchInput").value = "";
   state.category = "全部";
   state.favoritesOnly = false;
+  state.page = 1;
   $("#favoritesOnly").textContent = "☆ 收藏";
   renderCats();
   render();
@@ -265,6 +319,7 @@ function initMobileAppUI() {
     if (action === "home") {
       state.category = "全部";
       state.favoritesOnly = false;
+      state.page = 1;
       $("#searchInput").value = "";
       $("#favoritesOnly").textContent = "☆ 收藏";
       renderCats();
