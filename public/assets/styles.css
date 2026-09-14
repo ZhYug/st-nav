@@ -914,6 +914,7 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
   .public-page .nav-category-heading{font-size:15px;margin-bottom:9px}
 }
 
-/* CSV import: keep the native file input in the DOM and focusable; do not use display:none. */
-.csv-file-input{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important;opacity:0!important}
-.csv-file-input:focus-visible + *{outline:2px solid var(--primary)}
+/* CSV import: use a real label/file-input activation instead of input.click(). This works in browsers/WebViews that reject programmatic file-picker activation. */
+.csv-picker{position:relative!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important;cursor:pointer!important;white-space:nowrap!important}
+.csv-picker input[type="file"]{position:absolute!important;inset:0!important;width:100%!important;max-width:none!important;height:100%!important;margin:0!important;padding:0!important;border:0!important;opacity:0!important;cursor:pointer!important;font-size:0!important}
+.csv-picker:focus-within{outline:2px solid var(--primary);outline-offset:2px}

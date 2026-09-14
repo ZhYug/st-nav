@@ -525,17 +525,12 @@ $("#exportLinks").onclick = () => {
   URL.revokeObjectURL(link.href);
 };
 
-$("#importLinksBtn").onclick = () => {
-  const input = $("#csvFile");
-  input.value = "";
-  input.click();
-};
 $("#csvFile").onchange = async (event) => {
   const file = event.target.files[0];
   if (!file) return;
   const text = await file.text();
   const lines = text.replace(/^\ufeff/, "").split(/\r?\n/).filter(Boolean);
-  if (lines.length < 2) { toast("CSV 没有数据"); return; }
+  if (lines.length < 2) { toast("CSV 没有数据"); event.target.value = ""; return; }
   const parseCsvLine = (line) => {
     const values = [];
     let current = "", quoted = false;

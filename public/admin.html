@@ -36,7 +36,7 @@
       </section>
       <section id="section-links" class="admin-section hidden">
         <div class="section-bar"><div><h2>短链接</h2><p>创建、管理和分析你的短链接。</p></div><div class="bar-actions"><button class="btn secondary" id="exportLinks">导出 CSV</button><button class="btn primary" id="addLinkBtn">+ 新建短链接</button></div></div>
-        <div class="panel table-panel"><div class="table-tools"><input id="linkSearch" placeholder="搜索短链接…"><button class="btn secondary" id="importLinksBtn" type="button">批量导入 CSV</button><input id="csvFile" type="file" accept=".csv,text/csv" class="csv-file-input" aria-label="选择 CSV 文件"></div><div class="table-scroll"><table><thead><tr><th>短码</th><th>目标</th><th>分类</th><th>点击</th><th>状态</th><th></th></tr></thead><tbody id="linksTable"></tbody></table></div><div id="linksPagination" class="pagination"></div></div>
+        <div class="panel table-panel"><div class="table-tools"><input id="linkSearch" placeholder="搜索短链接…"><label class="btn secondary csv-picker" id="importLinksBtn">批量导入 CSV<input id="csvFile" type="file" accept=".csv,text/csv,application/vnd.ms-excel" aria-label="选择 CSV 文件"></label></div><div class="table-scroll"><table><thead><tr><th>短码</th><th>目标</th><th>分类</th><th>点击</th><th>状态</th><th></th></tr></thead><tbody id="linksTable"></tbody></table></div><div id="linksPagination" class="pagination"></div></div>
       </section>
       <section id="section-navigation" class="admin-section hidden">
         <div class="section-bar"><div><h2>导航管理</h2><p>拖拽调整顺序；关联短链接会自动同步。<span id="navCount" class="section-count">0 项</span></p></div><div class="bar-actions"><button class="btn secondary" id="saveNavOrder">保存排序</button><button class="btn primary" id="addNavBtn">+ 添加导航</button></div></div>
