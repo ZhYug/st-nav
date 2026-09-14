@@ -525,37 +525,93 @@ $("#exportLinks").onclick = () => {
   URL.revokeObjectURL(link.href);
 };
 
-$("#csvFile").onchange = async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-  const text = await file.text();
-  const lines = text.replace(/^\ufeff/, "").split(/\r?\n/).filter(Boolean);
-  if (lines.length < 2) { toast("CSV 没有数据"); event.target.value = ""; return; }
-  const parseCsvLine = (line) => {
-    const values = [];
-    let current = "", quoted = false;
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"' && line[i + 1] === '"') { current += '"'; i++; }
-      else if (char === '"') quoted = !quoted;
-      else if (char === "," && !quoted) { values.push(current); current = ""; }
-      else current += char;
+const csvInput = $("#csvFile");
+const csvImportButton = $("#importLinksBtn");
+
+// File pickers are browser-owned UI. Keep the input as a real, top-level
+// file control and only open it from the user's click event. This avoids
+// label/opacity/hidden-input quirks in mobile WebViews.
+csvImportButton?.addEventListener("click", () => {
+  if (!csvInput) return;
+  csvInput.value = "";
+  csvInput.click();
+});
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [], cell = "", quoted = false;
+  const source = String(text || "").replace(/^\uFEFF/, "");
+
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    const next = source[i + 1];
+    if (ch === '"') {
+      if (quoted && next === '"') { cell += '"'; i++; }
+      else quoted = !quoted;
+    } else if (ch === "," && !quoted) {
+      row.push(cell); cell = "";
+    } else if ((ch === "\n" || ch === "\r") && !quoted) {
+      if (ch === "\r" && next === "\n") i++;
+      row.push(cell); cell = "";
+      if (row.some((value) => value.trim() !== "")) rows.push(row);
+      row = [];
+    } else {
+      cell += ch;
     }
-    values.push(current);
-    return values;
-  };
-  const headers = parseCsvLine(lines[0]).map((x) => x.trim());
-  let success = 0;
-  for (const line of lines.slice(1)) {
-    const values = parseCsvLine(line), data = {};
-    headers.forEach((key, index) => data[key] = values[index] || "");
-    data.enabled = data.enabled !== "false";
-    try { await api("/api/admin/links", { method: "POST", body: JSON.stringify(data) }); success++; } catch {}
   }
-  toast(`导入完成：${success} 条`);
-  event.target.value = "";
-  await loadAll();
-};
+  if (quoted) throw new Error("CSV 引号不匹配");
+  if (cell !== "" || row.length) {
+    row.push(cell);
+    if (row.some((value) => value.trim() !== "")) rows.push(row);
+  }
+  return rows;
+}
+
+csvInput?.addEventListener("change", async (event) => {
+  const input = event.currentTarget;
+  const file = input.files?.[0];
+  if (!file) return;
+
+  try {
+    if (!/\.csv$/i.test(file.name || "")) {
+      throw new Error("请选择扩展名为 .csv 的文件");
+    }
+    if (file.size === 0) throw new Error("CSV 文件为空");
+    if (file.size > 10 * 1024 * 1024) throw new Error("CSV 文件不能超过 10 MB");
+
+    const rows = parseCsv(await file.text());
+    if (rows.length < 2) throw new Error("CSV 没有可导入的数据");
+
+    const headers = rows[0].map((value) => value.trim().toLowerCase());
+    const required = ["code", "url"];
+    const missing = required.filter((key) => !headers.includes(key));
+    if (missing.length) throw new Error(`CSV 缺少必需列：${missing.join(", ")}`);
+
+    let success = 0;
+    let failed = 0;
+    for (const values of rows.slice(1)) {
+      const data = {};
+      headers.forEach((key, index) => { data[key] = String(values[index] ?? "").trim(); });
+      if (!data.code || !data.url) { failed++; continue; }
+      data.enabled = data.enabled !== "false";
+      try {
+        await api("/api/admin/links", { method: "POST", body: JSON.stringify(data) });
+        success++;
+      } catch (error) {
+        failed++;
+        console.warn("CSV row import failed", data.code, error);
+      }
+    }
+
+    toast(`导入完成：成功 ${success} 条${failed ? `，失败 ${failed} 条` : ""}`);
+    await loadAll();
+  } catch (error) {
+    console.error("CSV import failed", error);
+    toast(`CSV 导入失败：${error.message || "读取文件失败"}`);
+  } finally {
+    input.value = "";
+  }
+});
 
 function toggleAdminTheme() {
   document.documentElement.classList.toggle("light-admin");
