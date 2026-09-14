@@ -194,7 +194,7 @@ function renderPagination(total, totalPages) {
   const from = total ? (state.page - 1) * state.pageSize + 1 : 0;
   const to = Math.min(state.page * state.pageSize, total);
   const pages = [];
-  const addPage = (page) => pages.push(`<button class="page-btn ${page === state.page ? "active" : ""}" data-page="${page}" ${page === state.page ? "aria-current=\"page\"" : ""}>${page}</button>`);
+  const addPage = (page) => pages.push(`<button class="page-btn page-number ${page === state.page ? "active" : ""}" data-page="${page}" ${page === state.page ? "aria-current=\"page\"" : ""}>${page}</button>`);
   if (totalPages <= 7) {
     for (let i = 1; i <= totalPages; i++) addPage(i);
   } else {
