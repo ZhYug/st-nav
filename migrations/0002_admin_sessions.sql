@@ -10,4 +10,3 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires_at ON admin_sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_revoked_at ON admin_sessions(revoked_at);
 
-PRAGMA user_version = 2;

@@ -21,7 +21,7 @@ async function ensureDatabase(env) {
           SELECT name
           FROM sqlite_master
           WHERE type = 'table'
-            AND name IN (?, ?, ?, ?)
+            AND name IN (?, ?, ?, ?, ?)
         `)
         .bind(...requiredTables)
         .all();
