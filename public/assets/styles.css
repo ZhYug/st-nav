@@ -1042,3 +1042,170 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
     font-size:10px !important;
   }
 }
+
+
+/* v1.1.9 mobile short-link cards: compact 4-row layout. Desktop is intentionally untouched. */
+@media (max-width:600px){
+  .admin-page #section-links .table-panel{overflow:visible;}
+  .admin-page #section-links .table-scroll{overflow:visible;}
+  .admin-page #section-links table{
+    width:100%;
+    min-width:0;
+    border-collapse:separate;
+    border-spacing:0 6px;
+    table-layout:fixed;
+  }
+  .admin-page #section-links table tbody,
+  .admin-page #section-links table tr,
+  .admin-page #section-links table td{box-sizing:border-box;}
+  .admin-page #section-links table tr{
+    position:relative;
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    grid-template-areas:
+      "code code"
+      "target target"
+      "category clicks"
+      "status actions";
+    align-items:center;
+    gap:0 10px;
+    width:100%;
+    min-height:0;
+    padding:8px 10px;
+    margin:0;
+    border:1px solid var(--border);
+    border-radius:13px;
+    background:var(--surface);
+    box-shadow:0 5px 16px rgba(0,0,0,.07);
+  }
+  .admin-page #section-links table td{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    width:auto;
+    min-width:0;
+    min-height:0;
+    padding:5px 0;
+    margin:0;
+    border:0;
+    border-bottom:1px solid var(--border);
+    gap:8px;
+    font-size:11px;
+    line-height:1.25;
+  }
+  .admin-page #section-links table td:nth-child(1){
+    position:absolute;
+    top:9px;
+    left:10px;
+    z-index:2;
+    display:block;
+    width:18px;
+    padding:0;
+    border:0;
+  }
+  .admin-page #section-links table td:nth-child(2){
+    grid-area:code;
+    min-width:0;
+    padding:2px 0 6px 28px;
+    border-bottom:1px solid var(--border);
+  }
+  .admin-page #section-links table td:nth-child(3){
+    grid-area:target;
+    min-width:0;
+    padding:5px 0;
+  }
+  .admin-page #section-links table td:nth-child(4){
+    grid-area:category;
+  }
+  .admin-page #section-links table td:nth-child(5){
+    grid-area:clicks;
+    justify-content:flex-end;
+  }
+  .admin-page #section-links table td:nth-child(6){
+    grid-area:status;
+    border-bottom:0;
+    padding-bottom:2px;
+  }
+  .admin-page #section-links table td:nth-child(7){
+    grid-area:actions;
+    justify-content:flex-end;
+    border-bottom:0;
+    padding-bottom:2px;
+  }
+  .admin-page #section-links table td::before{
+    flex:0 0 auto;
+    color:var(--faint);
+    font-size:9px;
+    line-height:1;
+  }
+  .admin-page #section-links table td:nth-child(2)::before{content:"短码";}
+  .admin-page #section-links table td:nth-child(3)::before{content:"目标";}
+  .admin-page #section-links table td:nth-child(4)::before{content:"分类";}
+  .admin-page #section-links table td:nth-child(5)::before{content:"点击";}
+  .admin-page #section-links table td:nth-child(6)::before{content:"状态";}
+  .admin-page #section-links table td:nth-child(7)::before{content:"操作";}
+  .admin-page #section-links table td:nth-child(2)>strong{
+    display:block;
+    min-width:0;
+    max-width:calc(100% - 34px);
+    margin-left:auto;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    font-size:15px;
+    line-height:1.25;
+    text-align:right;
+  }
+  .admin-page #section-links table td:nth-child(3) .link-dense-title{
+    min-width:0;
+    max-width:calc(100% - 30px);
+    margin-left:auto;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    text-align:right;
+    font-size:11px;
+  }
+  .admin-page #section-links table td:nth-child(4) .link-category,
+  .admin-page #section-links table td:nth-child(5) .click-count{
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .admin-page #section-links table td:nth-child(4) .link-category{max-width:calc(100vw - 180px);}
+  .admin-page #section-links table td:nth-child(5) .click-count{font-size:11px;}
+  .admin-page #section-links table td:nth-child(6) .status{font-size:9px;padding:4px 7px;}
+  .admin-page #section-links table td:nth-child(7) .row-actions{
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:4px;
+    flex-wrap:nowrap;
+    max-width:none;
+  }
+  .admin-page #section-links table td:nth-child(7) .small-btn{
+    width:29px;
+    min-width:29px;
+    height:29px;
+    min-height:29px;
+    padding:0;
+    border-radius:8px;
+    font-size:11px;
+  }
+  .admin-page #section-links table .link-select{
+    display:block;
+    width:18px;
+    height:18px;
+    margin:0;
+  }
+  .admin-page #section-links table td:last-child{padding-right:0;}
+}
+
+@media (max-width:380px){
+  .admin-page #section-links table tr{padding:7px 9px;border-radius:12px;}
+  .admin-page #section-links table td{padding-top:4px;padding-bottom:4px;}
+  .admin-page #section-links table td:nth-child(2){padding-left:27px;padding-bottom:5px;}
+  .admin-page #section-links table td:nth-child(2)>strong{font-size:14px;}
+  .admin-page #section-links table td:nth-child(7) .small-btn{width:27px;min-width:27px;height:27px;min-height:27px;}
+}
