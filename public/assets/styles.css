@@ -920,98 +920,83 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
   .public-page .nav-category-heading{font-size:15px;margin-bottom:9px}
 }
 
-/* v1.1.8 admin layout refinements */
-.admin-page .admin-header{
-  position:static;
-  top:auto;
-  margin-top:14px;
-  box-shadow:none;
-}
 
-/* Keep the four admin sections at the top; no floating admin header. */
-.admin-page .sidebar{
-  position:sticky;
-  top:0;
-  z-index:40;
-  width:100%;
-  height:auto;
-  min-height:0;
-  padding:12px 20px;
-  border-right:0;
-  border-bottom:1px solid var(--border);
-  background:rgba(10,12,17,.96);
-  backdrop-filter:blur(18px);
-  -webkit-backdrop-filter:blur(18px);
-}
-.admin-page .side-brand{
-  display:none;
-}
-.admin-page .sidebar nav{
-  display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
-  gap:8px;
-  width:min(100%,1100px);
-  margin:0 auto;
-}
-.admin-page .side-item{
-  justify-content:center;
-  min-width:0;
-  min-height:42px;
-  padding:8px 12px;
-  border-radius:12px;
-  text-align:center;
-}
-.admin-page .sidebar-bottom{display:none}
-.admin-page .admin-main{max-width:1500px;margin:0 auto;padding-top:0}
-
-/* All bordered admin boxes use rounded corners. */
-.admin-page .panel,
-.admin-page .stat-card,
-.admin-page .table-panel,
-.admin-page .table-tools,
-.admin-page .link-bulk-toolbar,
-.admin-page .nav-admin-toolbar,
-.admin-page .nav-admin-bulk,
-.admin-page .admin-nav-card,
-.admin-page .settings-form,
-.admin-page .settings-group,
-.admin-page .modal-card,
-.admin-page .login-card,
-.admin-page table tr,
-.admin-page .pagination,
-.admin-page .page-btn,
-.admin-page .btn,
-.admin-page .text-btn,
-.admin-page .small-btn,
-.admin-page input,
-.admin-page textarea,
-.admin-page select,
-.admin-page .mobile-home-btn,
-.admin-page .icon-btn{
-  border-radius:12px;
-}
-.admin-page .table-panel{overflow:hidden}
-.admin-page .table-tools{overflow:hidden}
-
-/* Compact short-link cards on phones. */
+/* v1.1.9: keep v1.1.8 mobile admin refinements; restore v1.1.7 desktop layout. */
 @media (max-width:600px){
-  .admin-page .sidebar{
-    padding:6px 8px calc(6px + env(safe-area-inset-top));
-  }
-  .admin-page .sidebar nav{gap:4px}
-  .admin-page .side-item{
-    min-height:44px;
-    padding:5px 3px;
-    border-radius:10px;
-    font-size:11px !important;
-  }
   .admin-page .admin-header{
+    position:static;
+    top:auto;
     min-height:56px;
     margin:8px 0 12px;
     padding:8px 2px;
     border-radius:12px;
+    box-shadow:none;
   }
   .admin-page .admin-header h1{font-size:19px}
+
+  /* Four admin tabs remain fixed at the top on mobile, as in v1.1.8. */
+  .admin-page .sidebar{
+    position:sticky;
+    top:0;
+    z-index:40;
+    width:100%;
+    height:auto;
+    min-height:0;
+    padding:6px 8px calc(6px + env(safe-area-inset-top));
+    border-right:0;
+    border-bottom:1px solid var(--border);
+    background:rgba(10,12,17,.96);
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
+  }
+  .admin-page .side-brand{display:none}
+  .admin-page .sidebar nav{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:4px;
+    width:100%;
+    margin:0 auto;
+  }
+  .admin-page .side-item{
+    justify-content:center;
+    min-width:0;
+    min-height:44px;
+    padding:5px 3px;
+    border-radius:10px;
+    text-align:center;
+    font-size:11px !important;
+  }
+  .admin-page .sidebar-bottom{display:none}
+  .admin-page .admin-main{max-width:1500px;margin:0 auto;padding-top:0}
+
+  /* Rounded admin controls/cards on mobile, unchanged from v1.1.8. */
+  .admin-page .panel,
+  .admin-page .stat-card,
+  .admin-page .table-panel,
+  .admin-page .table-tools,
+  .admin-page .link-bulk-toolbar,
+  .admin-page .nav-admin-toolbar,
+  .admin-page .nav-admin-bulk,
+  .admin-page .admin-nav-card,
+  .admin-page .settings-form,
+  .admin-page .settings-group,
+  .admin-page .modal-card,
+  .admin-page .login-card,
+  .admin-page table tr,
+  .admin-page .pagination,
+  .admin-page .page-btn,
+  .admin-page .btn,
+  .admin-page .text-btn,
+  .admin-page .small-btn,
+  .admin-page input,
+  .admin-page textarea,
+  .admin-page select,
+  .admin-page .mobile-home-btn,
+  .admin-page .icon-btn{
+    border-radius:12px;
+  }
+  .admin-page .table-panel{overflow:hidden}
+  .admin-page .table-tools{overflow:hidden}
 
   .admin-page .link-bulk-toolbar{
     border:1px solid var(--border);
@@ -1056,9 +1041,4 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
     border-radius:8px;
     font-size:10px !important;
   }
-}
-
-@media (min-width:601px){
-  .admin-page .sidebar{padding-left:24px;padding-right:24px}
-  .admin-page .admin-header{margin-top:14px}
 }
