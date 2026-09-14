@@ -1,5 +1,4 @@
--- ST Nav v1.0.3 initial schema.
--- Safe to apply to a fresh D1 database or an existing v1.0.x database.
+-- Initial D1 schema.
 
 PRAGMA foreign_keys = ON;
 

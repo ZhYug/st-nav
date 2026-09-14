@@ -1,5 +1,5 @@
 
-const VERSION = "1.0.5";
+const VERSION = "1.0.9";
 const SESSION_COOKIE = "__Host-stnav_session";
 const SESSION_TTL = 86400;
 const PUBLIC_CACHE_CONTROL = "public, max-age=0, s-maxage=30, stale-while-revalidate=60";
@@ -288,7 +288,7 @@ function invalidateRedirectCache(request, ctx, code) {
   waitUntil(ctx, caches.default.delete(redirectCacheKey(request, code)));
 }
 
-async function invalidatePublicCache(request, ctx) {
+function invalidatePublicCache(request, ctx) {
   if (typeof caches === "undefined" || !caches.default) return;
   const key = publicCacheKey(request);
   waitUntil(ctx, caches.default.delete(key));
@@ -296,66 +296,53 @@ async function invalidatePublicCache(request, ctx) {
 
 async function getPublicBootstrap(env) {
   const results = await env.DB.batch([
-    env.DB.prepare(
-      `SELECT navigation.id,navigation.title,navigation.description,navigation.url,
-              navigation.icon,navigation.category,navigation.sort_order,navigation.enabled,
-              navigation.link_id,links.code
-       FROM navigation
-       LEFT JOIN links ON navigation.link_id = links.id
-       WHERE navigation.enabled=1
-         AND (navigation.link_id IS NULL OR links.enabled=1)
-       ORDER BY navigation.sort_order,navigation.id`
-    ),
+    env.DB.prepare(`SELECT navigation.id,navigation.title,navigation.description,navigation.url,
+                           navigation.icon,navigation.category,navigation.sort_order,navigation.enabled,
+                           navigation.link_id,links.code,links.url AS link_url
+                    FROM navigation
+                    LEFT JOIN links ON navigation.link_id=links.id
+                    WHERE navigation.enabled=1 AND (navigation.link_id IS NULL OR links.enabled=1)
+                    ORDER BY navigation.sort_order,navigation.id`),
     env.DB.prepare("SELECT key,value FROM settings"),
   ]);
+  return { items: results[0].results, settings: Object.fromEntries(results[1].results.map((row) => [row.key, row.value])) };
+}
 
+function publicPayload(data, request) {
+  const origin = new URL(request.url).origin;
   return {
-    items: results[0].results,
-    settings: Object.fromEntries(results[1].results.map((x) => [x.key, x.value])),
+    items: data.items.map((item) => ({
+      ...item,
+      target_url: item.link_url || item.url,
+      ...(item.code ? { short_url: `${origin}/${item.code}` } : {}),
+    })),
+    settings: data.settings,
   };
 }
 
-async function cachedPublicBootstrap(request, env, ctx) {
-  if (typeof caches === "undefined" || !caches.default) {
-    const data = await getPublicBootstrap(env);
-    const origin = new URL(request.url).origin;
-    return json({
-      items: data.items.map((item) => ({
-        ...item,
-        ...(item.code ? { short_url: `${origin}/${item.code}` } : {}),
-      })),
-      settings: data.settings,
-    });
+function cachePut(cache, key, response, ctx) {
+  try {
+    const put = cache.put(key, response.clone());
+    if (ctx?.waitUntil) ctx.waitUntil(put);
+    else put.catch((error) => console.error("Cache write failed", error));
+  } catch (error) {
+    console.error("Cache write failed", error);
   }
+}
+
+async function cachedPublicBootstrap(request, env, ctx) {
+  if (!redirectCacheAvailable()) return json(publicPayload(await getPublicBootstrap(env), request));
+
   const cache = caches.default;
   const key = publicCacheKey(request);
   const cached = await cache.match(key);
   if (cached) return cached;
 
-  const data = await getPublicBootstrap(env);
-  const origin = new URL(request.url).origin;
-  const items = data.items.map((item) => ({
-    ...item,
-    ...(item.code ? { short_url: `${origin}/${item.code}` } : {}),
-  }));
-  const response = json(
-    { items, settings: data.settings },
-    200,
-    { "cache-control": PUBLIC_CACHE_CONTROL }
-  );
-  // Cache API stores a clone so the response can still be returned immediately.
-  ctxSafePut(cache, key, response, ctx);
+  const response = json(publicPayload(await getPublicBootstrap(env), request), 200, {
+    "cache-control": PUBLIC_CACHE_CONTROL,
+  });
+  cachePut(cache, key, response, ctx);
   return response;
-}
-
-function ctxSafePut(cache, key, response, ctx) {
-  try {
-    const put = cache.put(key, response.clone());
-    if (ctx?.waitUntil) ctx.waitUntil(put);
-    else if (put?.catch) put.catch((error) => console.error("Public cache put failed", error));
-  } catch (error) {
-    console.error("Public cache put failed", error);
-  }
 }
 
 const loginAttempts = new Map();
@@ -391,15 +378,8 @@ async function handleApi(request, env, ctx, parts) {
   const method = request.method.toUpperCase();
   const path = "/" + parts.join("/");
 
-  // Authentication and health checks do not require D1. This keeps failed-login
-  // traffic away from the database and makes health probes cheap.
-  const needsDatabase = !(
-    path === "/api/auth/login" ||
-    path === "/api/auth/logout" ||
-    path === "/api/auth/me" ||
-    path === "/api/health"
-  );
-  if (needsDatabase) await ensureDatabase(env);
+  const noDatabase = new Set(["/api/auth/login", "/api/auth/logout", "/api/auth/me", "/api/health"]);
+  if (!noDatabase.has(path)) await ensureDatabase(env);
 
   if (path === "/api/auth/login" && method === "POST") {
     if (!sameOrigin(request)) return json({ error: "非法来源" }, 403);
@@ -442,21 +422,6 @@ async function handleApi(request, env, ctx, parts) {
     return cachedPublicBootstrap(request, env, ctx);
   }
 
-  if (path === "/api/public/navigation" && method === "GET") {
-    const data = await getPublicBootstrap(env);
-    const origin = new URL(request.url).origin;
-    const items = data.items.map((item) => ({
-      ...item,
-      ...(item.code ? { short_url: `${origin}/${item.code}` } : {}),
-    }));
-    return json({ items }, 200, { "cache-control": PUBLIC_CACHE_CONTROL });
-  }
-
-  if (path === "/api/public/settings" && method === "GET") {
-    const data = await getPublicBootstrap(env);
-    return json({ settings: data.settings }, 200, { "cache-control": PUBLIC_CACHE_CONTROL });
-  }
-
   const auth = await requireAuth(request, env);
   if (auth) return auth;
 
@@ -483,7 +448,7 @@ async function handleApi(request, env, ctx, parts) {
       env.DB.prepare(`SELECT
         navigation.id,navigation.title,navigation.description,navigation.url,navigation.icon,
         navigation.category,navigation.sort_order,navigation.enabled,navigation.created_at,
-        navigation.updated_at,navigation.link_id,links.code,links.title AS link_title,
+        navigation.updated_at,navigation.link_id,links.code,links.url AS link_url,links.title AS link_title,
         links.description AS link_description,links.category AS link_category,
         links.enabled AS link_enabled
        FROM navigation
@@ -517,43 +482,6 @@ async function handleApi(request, env, ctx, parts) {
       navigation: nav,
       settings: Object.fromEntries(results[5].results.map((x) => [x.key, x.value])),
     });
-  }
-
-  if (path === "/api/admin/dashboard" && method === "GET") {
-    const stats = await env.DB.prepare(
-      `SELECT (SELECT COUNT(*) FROM links) links,
-              (SELECT COALESCE(SUM(clicks),0) FROM links) clicks,
-              (SELECT COUNT(*) FROM navigation) navigation,
-              (SELECT COALESCE(SUM(clicks),0) FROM link_daily_stats WHERE day >= date('now','-13 day')) recentClicks`
-    ).first();
-    const [top, trend] = await env.DB.batch([
-      env.DB.prepare("SELECT id,code,url,title,clicks FROM links ORDER BY clicks DESC,id DESC LIMIT 8"),
-      env.DB.prepare("SELECT day,COALESCE(SUM(clicks),0) clicks FROM link_daily_stats WHERE day >= date('now','-13 day') GROUP BY day ORDER BY day"),
-    ]);
-    const trendMap = new Map(trend.results.map((row) => [row.day, Number(row.clicks) || 0]));
-    const trendRows = [];
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    for (let offset = 13; offset >= 0; offset--) {
-      const day = new Date(today);
-      day.setUTCDate(today.getUTCDate() - offset);
-      const key = day.toISOString().slice(0, 10);
-      trendRows.push({ day: key, clicks: trendMap.get(key) || 0 });
-    }
-    return json({ stats, topLinks: top.results, trend: trendRows });
-  }
-
-  if (path === "/api/admin/links" && method === "GET") {
-    const result = await env.DB.prepare(
-      "SELECT * FROM links ORDER BY created_at DESC,id DESC"
-    ).all();
-    const origin = new URL(request.url).origin;
-    const items = result.results.map((item) => ({
-      ...item,
-      short_url: item.code ? `${origin}/${item.code}` : "",
-    }));
-
-    return json({ items });
   }
 
   if (path === "/api/admin/links" && method === "POST") {
@@ -677,37 +605,9 @@ async function handleApi(request, env, ctx, parts) {
     }
   }
 
-  if (path === "/api/admin/navigation" && method === "GET") {
-    const result = await env.DB.prepare(
-      `SELECT
-        navigation.id,navigation.title,navigation.description,navigation.url,navigation.icon,
-        navigation.category,navigation.sort_order,navigation.enabled,navigation.created_at,
-        navigation.updated_at,navigation.link_id,
-        links.code,
-        links.title AS link_title,
-        links.description AS link_description,
-        links.category AS link_category,
-        links.enabled AS link_enabled
-       FROM navigation
-       LEFT JOIN links ON navigation.link_id = links.id
-       ORDER BY navigation.sort_order,navigation.id`
-    ).all();
-    const origin = new URL(request.url).origin;
-    const items = result.results.map((item) => ({
-      ...item,
-      short_url: item.code ? `${origin}/${item.code}` : "",
-      // 对关联短链接的导航，url 是实际可点击的短链接地址；
-      // 手动导航则保留数据库中的目标 URL。
-      url: item.code ? `${origin}/${item.code}` : item.url,
-    }));
-
-    return json({ items });
-  }
-
   if (path === "/api/admin/navigation" && method === "POST") {
     const data = await body(request);
 
-    // V3.3：短链接直接加入导航
     if (data.link_id !== undefined && data.link_id !== null && data.link_id !== "") {
       const linkId = Number(data.link_id);
 
@@ -757,7 +657,6 @@ async function handleApi(request, env, ctx, parts) {
       return json({ ok: true });
     }
 
-    // 保留手动添加导航
     const title = clean(data.title, 120);
     const url = clean(data.url, 2000);
 
@@ -821,7 +720,6 @@ async function handleApi(request, env, ctx, parts) {
       ).bind(id).first();
       if (!current) return json({ error: "导航不存在" }, 404);
 
-      // 关联短链接的导航是短链接的只读投影，避免把短链接 URL 当成真实目标 URL 写回 links。
       if (current.link_id) {
         return json({ error: "此导航已关联短链接，请在「短链接」中编辑内容" }, 409);
       }
@@ -859,13 +757,6 @@ async function handleApi(request, env, ctx, parts) {
       invalidatePublicCache(request, ctx);
       return json({ ok: true });
     }
-  }
-
-  if (path === "/api/admin/settings" && method === "GET") {
-    const result = await env.DB.prepare("SELECT key,value FROM settings").all();
-    return json({
-      settings: Object.fromEntries(result.results.map((x) => [x.key, x.value])),
-    });
   }
 
   if (path === "/api/admin/settings" && method === "PUT") {
@@ -936,7 +827,6 @@ export default {
     try {
       if (parts[0] === "api") return await handleApi(request, env, ctx, parts);
 
-      // 显式将 /admin 映射到管理后台页面，这里显式映射到 admin.html。
       if (url.pathname === "/admin" || url.pathname === "/admin/") {
         const adminUrl = new URL("/admin.html", url);
         const adminRequest = new Request(adminUrl.toString(), {

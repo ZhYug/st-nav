@@ -1,17 +1,3 @@
-const $ = (selector) => document.querySelector(selector);
-const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({
-  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-}[c]));
-
-function readList(key) {
-  try {
-    const value = JSON.parse(localStorage.getItem(key) || "[]");
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
-}
-
 const state = {
   items: [],
   settings: {},
@@ -27,65 +13,32 @@ function scheduleRender() {
   searchFrame = requestAnimationFrame(render);
 }
 
-function iconUrl(url) {
-  try {
-    const hostname = new URL(url).hostname.toLowerCase();
-    return hostname
-      ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=128`
-      : "";
-  } catch {
-    return "";
-  }
-}
-
 function iconFallbackHtml(item) {
   return `<span class="site-icon site-icon-fallback">${esc(fallbackIcon(item))}</span>`;
 }
 
 function handleIconError(img) {
   const item = state.items.find((entry) => String(entry.id) === String(img.dataset.itemId));
-  if (!item) {
-    img.outerHTML = '<span class="site-icon site-icon-fallback">🌐</span>';
-    return;
-  }
+  if (!item) return (img.outerHTML = '<span class="site-icon site-icon-fallback">🌐</span>');
+
   const stage = Number(img.dataset.iconStage || "0");
-  const hostname = (() => {
-    try { return new URL(item.url).hostname.toLowerCase(); } catch { return ""; }
-  })();
-
-  if (stage === 0 && hostname) {
+  const target = item.target_url || item.link_url || item.url;
+  if (stage === 0 && iconUrl(target)) {
     img.dataset.iconStage = "1";
-    img.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=128`;
+    img.src = iconUrl(target);
     return;
   }
-
-  if (stage <= 1 && hostname) {
+  if (stage <= 1 && ddgIconUrl(target)) {
     img.dataset.iconStage = "2";
-    img.src = `https://icons.duckduckgo.com/ip3/${encodeURIComponent(hostname)}.ico`;
+    img.src = ddgIconUrl(target);
     return;
   }
-
   img.outerHTML = iconFallbackHtml(item);
-}
-
-function fallbackIcon(item) {
-  const icons = ["🌐", "🔗", "⭐", "🚀", "🧭", "💡", "🛠️", "🎯", "📌", "✨", "🪐", "⚡"];
-  const text = `${item.id || ""}${item.title || ""}${item.category || ""}`;
-  let hash = 0;
-  for (const char of text) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  return icons[hash % icons.length];
 }
 
 function savePrefs() {
   localStorage.setItem("sln_recent", JSON.stringify(state.recent.slice(0, 8)));
   localStorage.setItem("sln_favorites", JSON.stringify(state.favorites));
-}
-
-async function api(url, options = {}) {
-  const response = await fetch(url, { credentials: "same-origin", ...options });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "请求失败");
-  return data;
 }
 
 function applySettings() {
@@ -177,10 +130,9 @@ function filtered() {
 function cardHtml(item, index) {
   const displayUrl = item.code ? location.origin + "/" + item.code : item.url;
   const favorite = state.favorites.includes(item.id);
-  const icon = item.icon || iconUrl(item.url);
+  const icon = item.icon || iconUrl(item.target_url || item.link_url || item.url);
   let fallback = fallbackIcon(item);
-  try { fallback = fallbackIcon(item) || (item.title || new URL(item.url).hostname || "?")[0].toUpperCase(); } catch {}
-  return `<article class="nav-card" style="animation:fadeUp .28s ease ${Math.min(index, 10) * 0.035}s both" data-id="${item.id}">
+    return `<article class="nav-card" style="animation:fadeUp .28s ease ${Math.min(index, 10) * 0.035}s both" data-id="${item.id}">
     <div class="nav-top">
       <a class="nav-card-open" href="${esc(displayUrl)}" aria-label="打开 ${esc(item.title)}">
         <img class="site-icon" src="${esc(icon)}" data-item-id="${esc(item.id)}" alt="" loading="${index < 8 ? "eager" : "lazy"}" decoding="async" fetchpriority="${index < 4 ? "high" : "low"}" onerror="handleIconError(this)">
@@ -192,7 +144,7 @@ function cardHtml(item, index) {
     </div>
     <a class="nav-card-content" href="${esc(displayUrl)}">
       <h3>${esc(item.title)}</h3>
-      <p>${esc(item.description || (() => { try { return new URL(item.url).hostname; } catch { return item.url; } })())}</p>
+      <p>${esc(item.description || hostnameOf(item.target_url || item.link_url || item.url) || item.url)}</p>
     </a>
     <div class="nav-meta">
       ${item.category ? `<span class="tag">${esc(item.category)}</span>` : ""}
@@ -267,29 +219,10 @@ function bindGridEvents() {
   };
 }
 
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    const input = document.createElement("textarea");
-    input.value = text;
-    input.style.position = "fixed";
-    input.style.opacity = "0";
-    document.body.appendChild(input);
-    input.focus();
-    input.select();
-    let ok = false;
-    try { ok = document.execCommand("copy"); } catch {}
-    input.remove();
-    return ok;
-  }
-}
-
 function renderRecent() {
   const items = state.recent.map((id) => state.items.find((item) => item.id === id)).filter(Boolean);
   $("#recentGrid").innerHTML = items.length
-    ? items.map((item) => `<a class="recent-item" href="${esc(item.code ? location.origin + "/" + item.code : item.url)}"><img src="${esc(item.icon || iconUrl(item.url))}" data-item-id="${esc(item.id)}" alt="" loading="lazy" decoding="async" onerror="handleIconError(this)"><span>${esc(item.title)}</span></a>`).join("")
+    ? items.map((item) => `<a class="recent-item" href="${esc(item.code ? location.origin + "/" + item.code : item.url)}"><img src="${esc(item.icon || iconUrl(item.target_url || item.link_url || item.url))}" data-item-id="${esc(item.id)}" alt="" loading="lazy" decoding="async" onerror="handleIconError(this)"><span>${esc(item.title)}</span></a>`).join("")
     : '<span style="color:var(--faint);font-size:13px">还没有访问记录</span>';
 }
 

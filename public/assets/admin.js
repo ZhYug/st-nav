@@ -1,20 +1,4 @@
-const $ = (selector) => document.querySelector(selector);
-const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({
-  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-}[c]));
-
 const A = { links: [], nav: [], settings: {}, navSelected: new Set(), navDirty: false };
-
-async function api(url, options = {}) {
-  const response = await fetch(url, {
-    credentials: "same-origin",
-    ...options,
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "请求失败");
-  return data;
-}
 
 function toast(message) {
   const node = document.createElement("div");
@@ -319,23 +303,6 @@ function qrModal(item) {
 $("#addLinkBtn").onclick = () => linkModal();
 $("#addNavBtn").onclick = () => navModal();
 
-function iconUrl(url) {
-  try {
-    const host = new URL(url).hostname;
-    return `https://icons.duckduckgo.com/ip3/${host}.ico`;
-  } catch {
-    return "";
-  }
-}
-
-function fallbackIcon(item) {
-  const icons = ["🌐", "🔗", "⭐", "🚀", "🧭", "💡", "🛠️", "🎯", "📌", "✨", "🪐", "⚡"];
-  const text = `${item.id || ""}${item.title || ""}${item.category || ""}`;
-  let hash = 0;
-  for (const char of text) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  return icons[hash % icons.length];
-}
-
 function navIcon(item) { return item.icon || iconUrl(item.url); }
 
 function navFilteredItems() {
@@ -408,25 +375,6 @@ function bindDrag() {
       card.parentNode.insertBefore(dragging, event.clientY > rect.top + rect.height / 2 ? card.nextSibling : card);
     };
   });
-}
-
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    const input = document.createElement("textarea");
-    input.value = text;
-    input.style.position = "fixed";
-    input.style.opacity = "0";
-    document.body.appendChild(input);
-    input.focus();
-    input.select();
-    let ok = false;
-    try { ok = document.execCommand("copy"); } catch {}
-    input.remove();
-    return ok;
-  }
 }
 
 $("#navAdminGrid").onclick = async (event) => {
