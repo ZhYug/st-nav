@@ -1,5 +1,5 @@
 
-const VERSION = "1.1.5";
+const VERSION = "1.1.6";
 const SESSION_COOKIE = "__Host-stnav_session";
 const SESSION_TTL = 86400;
 const PUBLIC_CACHE_CONTROL = "public, max-age=0, s-maxage=30, stale-while-revalidate=60";
@@ -526,6 +526,80 @@ async function handleApi(request, env, ctx, parts) {
       }
     }
     return json({ error: "无法生成唯一短码，请稍后重试" }, 503);
+  }
+
+  if (path === "/api/admin/links/bulk" && method === "POST") {
+    const data = await body(request);
+    const ids = Array.isArray(data.ids) ? [...new Set(data.ids.map(Number))] : [];
+    const action = String(data.action || "");
+    if (!ids.length || ids.some((id) => !Number.isInteger(id) || id <= 0)) {
+      return json({ error: "请选择有效的短链接" }, 400);
+    }
+    if (!["navigation", "enable", "disable", "delete"].includes(action)) {
+      return json({ error: "不支持的批量操作" }, 400);
+    }
+    if (ids.length > 500) return json({ error: "单次最多操作 500 个短链接" }, 400);
+
+    const placeholders = ids.map(() => "?").join(",");
+    const linksResult = await env.DB.prepare(
+      `SELECT id,code,url,title,description,category,enabled FROM links WHERE id IN (${placeholders})`
+    ).bind(...ids).all();
+    const links = linksResult.results || [];
+    if (links.length !== ids.length) return json({ error: "部分短链接不存在，请刷新后重试" }, 404);
+
+    if (action === "enable" || action === "disable") {
+      const enabled = action === "enable" ? 1 : 0;
+      const timestamp = now();
+      await env.DB.batch([
+        env.DB.prepare(`UPDATE links SET enabled=?,updated_at=? WHERE id IN (${placeholders})`)
+          .bind(enabled, timestamp, ...ids),
+        env.DB.prepare(`UPDATE navigation SET enabled=?,updated_at=? WHERE link_id IN (${placeholders})`)
+          .bind(enabled, timestamp, ...ids),
+      ]);
+      invalidatePublicCache(request, ctx);
+      return json({ ok: true, message: `已${action === "enable" ? "启用" : "停用"} ${ids.length} 项` });
+    }
+
+    if (action === "delete") {
+      const codes = links.map((link) => link.code);
+      await env.DB.prepare(`DELETE FROM links WHERE id IN (${placeholders})`).bind(...ids).run();
+      invalidatePublicCache(request, ctx);
+      codes.forEach((code) => invalidateRedirectCache(request, ctx, code));
+      return json({ ok: true, message: `已删除 ${ids.length} 项` });
+    }
+
+    // Add selected short links to navigation in one request. Existing
+    // navigation entries are skipped instead of making the whole batch fail.
+    const existingResult = await env.DB.prepare(
+      `SELECT link_id FROM navigation WHERE link_id IN (${placeholders})`
+    ).bind(...ids).all();
+    const existing = new Set((existingResult.results || []).map((row) => Number(row.link_id)));
+    const pending = links.filter((link) => !existing.has(Number(link.id)));
+    if (!pending.length) return json({ ok: true, message: "所选短链接都已经在导航里了" });
+
+    const maxResult = await env.DB.prepare("SELECT COALESCE(MAX(sort_order),-1) m FROM navigation").first();
+    const baseOrder = Number(maxResult?.m ?? -1);
+    const timestamp = now();
+    const statements = pending.map((link, index) =>
+      env.DB.prepare(
+        `INSERT INTO navigation
+         (title,description,url,icon,category,sort_order,enabled,link_id,updated_at)
+         VALUES(?,?,?,?,?,?,?,?,?)`
+      ).bind(
+        clean(link.title, 120) || link.code,
+        clean(link.description, 500),
+        link.url,
+        faviconUrl(link.url),
+        clean(link.category, 80),
+        baseOrder + index + 1,
+        link.enabled ? 1 : 0,
+        link.id,
+        timestamp
+      )
+    );
+    await env.DB.batch(statements);
+    invalidatePublicCache(request, ctx);
+    return json({ ok: true, message: `已加入导航 ${pending.length} 项${existing.size ? `，跳过已存在 ${existing.size} 项` : ""}` });
   }
 
   const linkMatch = path.match(/^\/api\/admin\/links\/(\d+)$/);

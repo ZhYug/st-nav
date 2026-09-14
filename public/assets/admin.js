@@ -1,5 +1,5 @@
 const A = {
-  links: [], nav: [], settings: {}, navSelected: new Set(), navDirty: false,
+  links: [], nav: [], settings: {}, linkSelected: new Set(), navSelected: new Set(), navDirty: false,
   linkPage: 1, navPage: 1, linkPageSize: Number(localStorage.getItem("stnav_link_page_size")) || 10, navPageSize: Number(localStorage.getItem("stnav_nav_page_size")) || 12,
 };
 
@@ -81,6 +81,7 @@ async function loadAll() {
     A.nav = data.navigation || [];
     A.settings = data.settings || {};
     A.navSelected = new Set();
+    A.linkSelected = new Set();
     A.navDirty = false;
     A.linkPage = 1;
     A.navPage = 1;
@@ -184,12 +185,30 @@ function renderPagination(container, page, total, pageSize, onChange) {
   }
 }
 
-function renderLinks() {
+function filteredLinks() {
   const query = ($("#linkSearch")?.value || "").trim().toLowerCase();
-  const rows = A.links.filter((item) =>
-    [item.code, item.url, item.title, item.category]
+  return A.links.filter((item) =>
+    [item.code, item.url, item.title, item.description, item.category]
       .join(" ").toLowerCase().includes(query)
   );
+}
+
+function refreshLinkBulkState(rows = filteredLinks()) {
+  const selectedCount = A.linkSelected.size;
+  const visibleSelected = rows.filter((item) => A.linkSelected.has(Number(item.id))).length;
+  const allSelected = rows.length > 0 && visibleSelected === rows.length;
+  const checkbox = $("#selectAllLinks");
+  if (checkbox) {
+    checkbox.checked = allSelected;
+    checkbox.indeterminate = visibleSelected > 0 && !allSelected;
+  }
+  if ($("#linkSelectedCount")) $("#linkSelectedCount").textContent = `已选 ${selectedCount} 项`;
+  document.querySelectorAll("#addSelectedLinksNav,#enableSelectedLinks,#disableSelectedLinks,#deleteSelectedLinks,#clearSelectedLinks")
+    .forEach((button) => { button.disabled = selectedCount === 0; });
+}
+
+function renderLinks() {
+  const rows = filteredLinks();
   const pages = Math.max(1, Math.ceil(rows.length / A.linkPageSize));
   A.linkPage = Math.min(Math.max(1, A.linkPage), pages);
   const offset = (A.linkPage - 1) * A.linkPageSize;
@@ -197,8 +216,10 @@ function renderLinks() {
 
   $("#linksTable").innerHTML = pageRows.map((item) => {
     const linked = linkedNav(item);
+    const selected = A.linkSelected.has(Number(item.id));
     return `
-      <tr class="link-dense-row">
+      <tr class="link-dense-row ${selected ? "selected" : ""}">
+        <td class="link-check-cell" data-label="选择"><input class="link-select" type="checkbox" data-act="select" data-id="${item.id}" ${selected ? "checked" : ""} aria-label="选择 /${esc(item.code)}"></td>
         <td data-label="短码"><strong>/${esc(item.code)}</strong></td>
         <td data-label="目标"><div class="link-dense-title" title="${esc(item.title || item.url)}">${esc(item.title || item.url)}</div></td>
         <td data-label="分类"><span class="link-category">${esc(item.category || "未分类")}</span></td>
@@ -210,8 +231,9 @@ function renderLinks() {
           <button class="small-btn danger-btn del-btn" data-act="del" data-id="${item.id}" aria-label="删除" title="删除">×</button>
         </div></td>
       </tr>`;
-  }).join("") || '<tr><td colspan="6" style="text-align:center;padding:30px">暂无短链接</td></tr>';
+  }).join("") || '<tr><td colspan="7" style="text-align:center;padding:30px">暂无短链接</td></tr>';
 
+  refreshLinkBulkState(rows);
   renderPagination("#linksPagination", A.linkPage, rows.length, A.linkPageSize, (page, pageSize) => {
     A.linkPage = page;
     if (pageSize) { A.linkPageSize = pageSize; localStorage.setItem("stnav_link_page_size", String(pageSize)); }
@@ -220,15 +242,52 @@ function renderLinks() {
 }
 
 $("#linkSearch").oninput = () => { A.linkPage = 1; renderLinks(); };
+$("#selectAllLinks").onchange = (event) => {
+  const rows = filteredLinks();
+  rows.forEach((item) => {
+    if (event.target.checked) A.linkSelected.add(Number(item.id));
+    else A.linkSelected.delete(Number(item.id));
+  });
+  renderLinks();
+};
+$("#clearSelectedLinks").onclick = () => { A.linkSelected.clear(); renderLinks(); };
 $("#linksTable").onclick = (event) => {
   const button = event.target.closest("[data-act]");
   if (!button) return;
   const item = A.links.find((value) => value.id == button.dataset.id);
   if (!item) return;
+  if (button.dataset.act === "select") {
+    const id = Number(item.id);
+    if (button.checked) A.linkSelected.add(id); else A.linkSelected.delete(id);
+    button.closest("tr")?.classList.toggle("selected", button.checked);
+    refreshLinkBulkState();
+    return;
+  }
   if (button.dataset.act === "edit") linkModal(item);
   if (button.dataset.act === "del") deleteLink(item);
   if (button.dataset.act === "nav") addLinkToNavigation(item);
 };
+
+async function bulkLinks(action) {
+  const ids = [...A.linkSelected].filter((id) => A.links.some((item) => Number(item.id) === id));
+  if (!ids.length) return toast("请先选择短链接");
+  if (action === "delete" && !confirm(`确定删除选中的 ${ids.length} 个短链接吗？关联的导航项目也会一起删除。此操作不可撤销。`)) return;
+  try {
+    const result = await api("/api/admin/links/bulk", {
+      method: "POST",
+      body: JSON.stringify({ ids, action }),
+    });
+    A.linkSelected.clear();
+    toast(result.message || "批量操作完成");
+    await loadAll();
+  } catch (error) { toast(error.message); }
+}
+
+$("#addSelectedLinksNav").onclick = () => bulkLinks("navigation");
+$("#enableSelectedLinks").onclick = () => bulkLinks("enable");
+$("#disableSelectedLinks").onclick = () => bulkLinks("disable");
+$("#deleteSelectedLinks").onclick = () => bulkLinks("delete");
+
 
 function linkModal(item = null) {
   openModal(item ? "编辑短链接" : "新建短链接", `
