@@ -34,7 +34,7 @@ if (existsSync('wrangler.toml')) {
   if (/^\s*\[assets\]/m.test(config)) fail('Pages 配置不应使用 [assets] Workers Static Assets 配置');
   if (!/binding\s*=\s*["']DB["']/.test(config) || !/database_name\s*=/.test(config)) fail('缺少 D1 DB binding');
   if (!/migrations_dir\s*=\s*["']\.\/migrations["']/.test(config)) fail('缺少 migrations_dir 配置');
-  if (!/ST_NAV_VERSION\s*=\s*["']1\.1\.5["']/.test(config)) fail('wrangler.toml 版本号不是 1.1.6');
+  if (!/ST_NAV_VERSION\s*=\s*["']1\.1\.6["']/.test(config)) fail('wrangler.toml 版本号不是 1.1.6');
   console.log('✓ Pages + D1 配置正确');
 }
 
