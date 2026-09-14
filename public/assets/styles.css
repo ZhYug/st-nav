@@ -1044,7 +1044,7 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
 }
 
 
-/* v1.1.9 mobile short-link cards: compact 4-row layout. Desktop is intentionally untouched. */
+/* v1.1.10: mobile short-link rows stay on one compact line, like desktop. */
 @media (max-width:600px){
   .admin-page #section-links .table-panel{overflow:visible;}
   .admin-page #section-links .table-scroll{overflow:visible;}
@@ -1058,154 +1058,142 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
   .admin-page #section-links table tbody,
   .admin-page #section-links table tr,
   .admin-page #section-links table td{box-sizing:border-box;}
-  .admin-page #section-links table tr{
+
+  .admin-page #section-links table tr.link-dense-row{
     position:relative;
-    display:grid;
-    grid-template-columns:minmax(0,1fr) auto;
-    grid-template-areas:
-      "code code"
-      "target target"
-      "category clicks"
-      "status actions";
+    display:grid !important;
+    grid-template-columns:18px 62px minmax(0,1fr) 48px 27px 40px 91px;
+    grid-template-areas:"select code target category clicks status actions";
     align-items:center;
-    gap:0 10px;
+    column-gap:5px;
+    row-gap:0;
     width:100%;
-    min-height:0;
-    padding:8px 10px;
+    min-height:52px;
+    padding:6px 7px !important;
     margin:0;
+    overflow:hidden;
     border:1px solid var(--border);
-    border-radius:13px;
+    border-radius:11px;
     background:var(--surface);
     box-shadow:0 5px 16px rgba(0,0,0,.07);
   }
+
   .admin-page #section-links table td{
-    display:flex;
+    display:flex !important;
     align-items:center;
-    justify-content:space-between;
-    width:auto;
+    justify-content:flex-start;
+    width:auto !important;
     min-width:0;
     min-height:0;
-    padding:5px 0;
+    height:38px;
+    padding:0 !important;
     margin:0;
-    border:0;
-    border-bottom:1px solid var(--border);
-    gap:8px;
+    border:0 !important;
+    gap:0;
     font-size:11px;
-    line-height:1.25;
-  }
-  .admin-page #section-links table td:nth-child(1){
-    position:absolute;
-    top:9px;
-    left:10px;
-    z-index:2;
-    display:block;
-    width:18px;
-    padding:0;
-    border:0;
-  }
-  .admin-page #section-links table td:nth-child(2){
-    grid-area:code;
-    min-width:0;
-    padding:2px 0 6px 28px;
-    border-bottom:1px solid var(--border);
-  }
-  .admin-page #section-links table td:nth-child(3){
-    grid-area:target;
-    min-width:0;
-    padding:5px 0;
-  }
-  .admin-page #section-links table td:nth-child(4){
-    grid-area:category;
-  }
-  .admin-page #section-links table td:nth-child(5){
-    grid-area:clicks;
-    justify-content:flex-end;
-  }
-  .admin-page #section-links table td:nth-child(6){
-    grid-area:status;
-    border-bottom:0;
-    padding-bottom:2px;
-  }
-  .admin-page #section-links table td:nth-child(7){
-    grid-area:actions;
-    justify-content:flex-end;
-    border-bottom:0;
-    padding-bottom:2px;
-  }
-  .admin-page #section-links table td::before{
-    flex:0 0 auto;
-    color:var(--faint);
-    font-size:9px;
     line-height:1;
+    overflow:hidden;
   }
-  .admin-page #section-links table td:nth-child(2)::before{content:"短码";}
-  .admin-page #section-links table td:nth-child(3)::before{content:"目标";}
-  .admin-page #section-links table td:nth-child(4)::before{content:"分类";}
-  .admin-page #section-links table td:nth-child(5)::before{content:"点击";}
-  .admin-page #section-links table td:nth-child(6)::before{content:"状态";}
-  .admin-page #section-links table td:nth-child(7)::before{content:"操作";}
+  .admin-page #section-links table td::before{display:none !important;}
+
+  .admin-page #section-links table td:nth-child(1){grid-area:select;}
+  .admin-page #section-links table td:nth-child(2){grid-area:code;}
+  .admin-page #section-links table td:nth-child(3){grid-area:target;}
+  .admin-page #section-links table td:nth-child(4){grid-area:category;}
+  .admin-page #section-links table td:nth-child(5){grid-area:clicks;justify-content:center;}
+  .admin-page #section-links table td:nth-child(6){grid-area:status;justify-content:center;}
+  .admin-page #section-links table td:nth-child(7){grid-area:actions;justify-content:flex-end;}
+
+  .admin-page #section-links table .link-select{
+    display:block;
+    width:16px;
+    height:16px;
+    margin:0;
+  }
   .admin-page #section-links table td:nth-child(2)>strong{
     display:block;
     min-width:0;
-    max-width:calc(100% - 34px);
-    margin-left:auto;
+    max-width:100%;
+    margin:0;
     overflow:hidden;
     text-overflow:ellipsis;
     white-space:nowrap;
-    font-size:15px;
-    line-height:1.25;
-    text-align:right;
+    font-size:12px;
+    line-height:1;
+    text-align:left;
   }
   .admin-page #section-links table td:nth-child(3) .link-dense-title{
+    display:block;
     min-width:0;
-    max-width:calc(100% - 30px);
-    margin-left:auto;
+    max-width:100%;
+    margin:0;
     overflow:hidden;
     text-overflow:ellipsis;
     white-space:nowrap;
-    text-align:right;
-    font-size:11px;
+    text-align:left;
+    font-size:10px;
+    line-height:1;
   }
   .admin-page #section-links table td:nth-child(4) .link-category,
   .admin-page #section-links table td:nth-child(5) .click-count{
+    display:block;
     min-width:0;
+    max-width:100%;
     overflow:hidden;
     text-overflow:ellipsis;
     white-space:nowrap;
+    font-size:10px;
   }
-  .admin-page #section-links table td:nth-child(4) .link-category{max-width:calc(100vw - 180px);}
-  .admin-page #section-links table td:nth-child(5) .click-count{font-size:11px;}
-  .admin-page #section-links table td:nth-child(6) .status{font-size:9px;padding:4px 7px;}
+  .admin-page #section-links table td:nth-child(6) .status{
+    display:inline-flex;
+    align-items:center;
+    white-space:nowrap;
+    font-size:9px;
+    line-height:1;
+    padding:4px 6px;
+  }
   .admin-page #section-links table td:nth-child(7) .row-actions{
-    display:flex;
+    display:flex !important;
     align-items:center;
     justify-content:flex-end;
-    gap:4px;
-    flex-wrap:nowrap;
+    gap:3px;
+    flex-wrap:nowrap !important;
+    width:100%;
     max-width:none;
   }
   .admin-page #section-links table td:nth-child(7) .small-btn{
-    width:29px;
-    min-width:29px;
-    height:29px;
-    min-height:29px;
-    padding:0;
-    border-radius:8px;
-    font-size:11px;
+    width:27px !important;
+    min-width:27px !important;
+    height:27px !important;
+    min-height:27px !important;
+    padding:0 !important;
+    border-radius:7px;
+    font-size:10px !important;
+    display:inline-flex !important;
+    align-items:center;
+    justify-content:center;
+    flex:0 0 27px;
   }
-  .admin-page #section-links table .link-select{
-    display:block;
-    width:18px;
-    height:18px;
-    margin:0;
-  }
-  .admin-page #section-links table td:last-child{padding-right:0;}
 }
 
 @media (max-width:380px){
-  .admin-page #section-links table tr{padding:7px 9px;border-radius:12px;}
-  .admin-page #section-links table td{padding-top:4px;padding-bottom:4px;}
-  .admin-page #section-links table td:nth-child(2){padding-left:27px;padding-bottom:5px;}
-  .admin-page #section-links table td:nth-child(2)>strong{font-size:14px;}
-  .admin-page #section-links table td:nth-child(7) .small-btn{width:27px;min-width:27px;height:27px;min-height:27px;}
+  .admin-page #section-links table tr.link-dense-row{
+    grid-template-columns:17px 55px minmax(0,1fr) 43px 24px 37px 84px;
+    column-gap:4px;
+    min-height:48px;
+    padding:5px 6px !important;
+  }
+  .admin-page #section-links table td{height:36px;}
+  .admin-page #section-links table td:nth-child(2)>strong{font-size:11px;}
+  .admin-page #section-links table td:nth-child(3) .link-dense-title{font-size:9px;}
+  .admin-page #section-links table td:nth-child(4) .link-category,
+  .admin-page #section-links table td:nth-child(5) .click-count{font-size:9px;}
+  .admin-page #section-links table td:nth-child(6) .status{font-size:8px;padding:3px 5px;}
+  .admin-page #section-links table td:nth-child(7) .small-btn{
+    width:25px !important;
+    min-width:25px !important;
+    height:25px !important;
+    min-height:25px !important;
+    flex-basis:25px;
+  }
 }
