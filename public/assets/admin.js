@@ -635,6 +635,12 @@ function closeModal() { $("#modal").classList.add("hidden"); }
 document.querySelectorAll("[data-close-modal]").forEach((node) => node.onclick = closeModal);
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
 
+const csvInput = $("#csvFile");
+const dataCsvInput = $("#dataCsvFile");
+const csvImportButton = $("#importLinksBtn");
+const dataCsvButton = $("#dataCsvBtn");
+const dataExportCsvButton = $("#dataExportCsvBtn");
+
 function exportLinksCsv(filename = "shortlinks.csv") {
   const headers = ["code", "url", "title", "description", "category", "enabled"];
   const escapeCsv = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
@@ -647,11 +653,6 @@ function exportLinksCsv(filename = "shortlinks.csv") {
 $("#exportLinks").onclick = () => exportLinksCsv();
 dataExportCsvButton?.addEventListener("click", () => exportLinksCsv("shortlinks.csv"));
 
-const csvInput = $("#csvFile");
-const dataCsvInput = $("#dataCsvFile");
-const csvImportButton = $("#importLinksBtn");
-const dataCsvButton = $("#dataCsvBtn");
-const dataExportCsvButton = $("#dataExportCsvBtn");
 const restoreJsonInput = $("#restoreJsonFile");
 const restoreJsonButton = $("#restoreJsonBtn");
 const backupJsonButton = $("#backupJsonBtn");
