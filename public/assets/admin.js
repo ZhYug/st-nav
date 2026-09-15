@@ -68,7 +68,7 @@ function switchSection(section) {
     overview: ["OVERVIEW", "控制台"],
     links: ["SHORT LINKS", "短链接管理"],
     navigation: ["NAVIGATION", "导航管理"],
-    settings: ["SETTINGS", "系统设置"],
+    settings: ["SYSTEM MANAGEMENT", "系统管理"],
     data: ["DATA MANAGEMENT", "数据管理"],
   };
   $("#sectionEyebrow").textContent = map[section][0];
@@ -619,15 +619,6 @@ function initSettingsTabs() {
     panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.settingsPanel !== name));
   };
   tabs.forEach((tab) => tab.addEventListener("click", () => activate(tab.dataset.settingsTab)));
-  document.querySelectorAll(".settings-panel-toggle").forEach((toggle) => {
-    toggle.addEventListener("click", () => {
-      const panel = toggle.closest(".settings-tab-panel");
-      if (!panel) return;
-      const expanded = toggle.getAttribute("aria-expanded") !== "false";
-      toggle.setAttribute("aria-expanded", String(!expanded));
-      panel.classList.toggle("collapsed", expanded);
-    });
-  });
 }
 
 function fillSettings() {

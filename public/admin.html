@@ -21,7 +21,7 @@
         <button class="side-item active" data-section="overview">⌂ <span>概览</span></button>
         <button class="side-item" data-section="links">↗ <span>短链接管理</span></button>
         <button class="side-item" data-section="navigation">▦ <span>导航管理</span></button>
-        <button class="side-item" data-section="settings">⚙ <span>系统设置</span></button>
+        <button class="side-item" data-section="settings">⚙ <span>系统管理</span></button>
       </nav>
       <div class="sidebar-bottom"><a href="/" target="_blank">打开前台 ↗</a><button id="logoutBtn">退出登录</button></div>
     </aside>
@@ -57,16 +57,16 @@
         <div id="navPagination" class="pagination"></div>
       </section>
       <section id="section-settings" class="admin-section hidden">
-        <div class="section-bar"><div><h2>系统设置</h2><p>按功能分区管理站点基础信息、导航显示以及数据备份恢复。</p></div></div>
+        <div class="section-bar"><div><h2>系统管理</h2><p>按功能分区管理站点基础信息、导航显示以及数据备份恢复。</p></div></div>
         <form id="settingsForm" class="settings-settings-form">
-        <div class="settings-tabs" role="tablist" aria-label="系统设置功能分类">
+        <div class="settings-tabs" role="tablist" aria-label="系统管理功能分类">
           <button class="settings-tab active" type="button" role="tab" aria-selected="true" aria-controls="settings-panel-basic" data-settings-tab="basic">⚙ 网站基础</button>
           <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-navigation" data-settings-tab="navigation">▦ 导航显示</button>
           <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-data" data-settings-tab="data">⇩ 数据管理</button>
         </div>
         <div class="settings-tab-panels">
           <section id="settings-panel-basic" class="settings-tab-panel active" data-settings-panel="basic" role="tabpanel">
-            <button class="settings-panel-toggle" type="button" aria-expanded="true"><span><strong>网站基础</strong><small>标题、首页文案、SEO 与视觉强调色</small></span><span class="settings-chevron">⌃</span></button>
+            <div class="settings-panel-head"><span><strong>网站基础</strong><small>标题、首页文案、SEO 与视觉强调色</small></span></div>
             <div class="settings-panel-content">
               <div class="settings-form settings-form-basic">
                 <div class="settings-group"><div><strong>网站基础</strong><small>前台首页的标题和说明。</small></div>
@@ -81,7 +81,7 @@
             </div>
           </section>
           <section id="settings-panel-navigation" class="settings-tab-panel hidden" data-settings-panel="navigation" role="tabpanel">
-            <button class="settings-panel-toggle" type="button" aria-expanded="true"><span><strong>导航显示</strong><small>分类标签、排序、隐藏分类与响应式布局</small></span><span class="settings-chevron">⌃</span></button>
+            <div class="settings-panel-head"><span><strong>导航显示</strong><small>分类标签、排序、隐藏分类与响应式布局</small></span></div>
             <div class="settings-panel-content">
               <div class="settings-form settings-form-navigation">
                 <div class="settings-group"><div><strong>导航标签排版</strong><small>控制分类标签样式、分类顺序和隐藏分类。</small></div>
@@ -101,7 +101,7 @@
             </div>
           </section>
           <section id="settings-panel-data" class="settings-tab-panel hidden" data-settings-panel="data" role="tabpanel">
-            <button class="settings-panel-toggle" type="button" aria-expanded="true"><span><strong>数据管理</strong><small>CSV 导入导出、JSON 备份与恢复</small></span><span class="settings-chevron">⌃</span></button>
+            <div class="settings-panel-head"><span><strong>数据管理</strong><small>CSV 导入导出、JSON 备份与恢复</small></span></div>
             <div class="settings-panel-content">
               <div class="settings-data-content">
                 <div class="settings-data-actions"><p>安全导入、导出和恢复导航数据。建议修改前先做一次 JSON 备份。</p><button class="btn primary" id="quickBackupBtn" type="button">一键备份</button></div>
