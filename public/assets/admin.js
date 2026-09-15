@@ -69,7 +69,6 @@ function switchSection(section) {
     links: ["SHORT LINKS", "短链接管理"],
     navigation: ["NAVIGATION", "导航管理"],
     settings: ["SETTINGS", "系统设置"],
-    data: ["DATA MANAGEMENT", "数据管理"],
   };
   $("#sectionEyebrow").textContent = map[section][0];
   $("#sectionTitle").textContent = map[section][1];
@@ -723,13 +722,40 @@ function normalizeCsvRows(rows) {
   });
 }
 
-function openCsvPicker(input) {
+function openFilePicker(input) {
   if (!input) return;
   input.value = "";
+  try {
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+      return;
+    }
+  } catch {}
+  // Fallback for browsers/WebViews without showPicker(). This call is kept
+  // synchronous so it remains inside the original user gesture.
   input.click();
 }
-csvImportButton?.addEventListener("click", () => openCsvPicker(csvInput));
-dataCsvButton?.addEventListener("click", () => openCsvPicker(dataCsvInput));
+
+async function readFileText(file) {
+  if (!file) throw new Error("未选择文件");
+  if (typeof file.text === "function") return file.text();
+  if (typeof file.arrayBuffer === "function" && typeof TextDecoder !== "undefined") {
+    const buffer = await file.arrayBuffer();
+    return new TextDecoder("utf-8", { fatal: false }).decode(buffer);
+  }
+  if (typeof FileReader !== "undefined") {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(new Error("浏览器无法读取文件"));
+      reader.readAsText(file, "utf-8");
+    });
+  }
+  throw new Error("当前浏览器不支持读取文件");
+}
+
+csvImportButton?.addEventListener("click", () => openFilePicker(csvInput));
+dataCsvButton?.addEventListener("click", () => openFilePicker(dataCsvInput));
 
 function csvPreviewModal(items, filename) {
   const valid = items.filter((item) => !item.error);
@@ -780,7 +806,7 @@ async function handleCsvFile(file) {
   if (!/\.csv$/i.test(file.name || "")) throw new Error("请选择扩展名为 .csv 的文件");
   if (file.size === 0) throw new Error("CSV 文件为空");
   if (file.size > 10 * 1024 * 1024) throw new Error("CSV 文件不能超过 10 MB");
-  const items = normalizeCsvRows(parseCsv(await file.text()));
+  const items = normalizeCsvRows(parseCsv(await readFileText(file)));
   csvPreviewModal(items, file.name);
 }
 
@@ -810,7 +836,7 @@ quickBackupButton?.addEventListener("click", async () => {
   finally { quickBackupButton.disabled = false; }
 });
 
-restoreJsonButton?.addEventListener("click", () => openCsvPicker(restoreJsonInput));
+restoreJsonButton?.addEventListener("click", () => openFilePicker(restoreJsonInput));
 restoreJsonInput?.addEventListener("change", async (event) => {
   const file = event.currentTarget.files?.[0];
   try {
@@ -818,7 +844,7 @@ restoreJsonInput?.addEventListener("change", async (event) => {
     if (!/\.json$/i.test(file.name || "")) throw new Error("请选择 JSON 备份文件");
     if (file.size === 0) throw new Error("JSON 文件为空");
     if (file.size > 10 * 1024 * 1024) throw new Error("JSON 备份不能超过 10 MB");
-    const data = JSON.parse(await file.text().replace(/^\uFEFF/, ""));
+    const data = JSON.parse((await readFileText(file)).replace(/^\uFEFF/, ""));
     const counts = data?.meta || {};
     if (data?.format !== "st-nav-backup" || !Array.isArray(data.links) || !Array.isArray(data.navigation) || !Array.isArray(data.settings)) {
       throw new Error("不是有效的 ST Nav JSON 备份文件");
