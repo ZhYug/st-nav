@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b0d12"><title>管理后台</title>
-  <link rel="icon" href="/assets/favicon.svg"><link rel="stylesheet" href="/assets/styles.css?v=1.1.13-data2">
+  <link rel="icon" href="/assets/favicon.svg"><link rel="stylesheet" href="/assets/styles.css?v=1.1.13-data3">
 </head>
 <body class="admin-page">
   <div id="loginView" class="login-view">
@@ -137,10 +137,10 @@
     // Keep the admin page out of stale service-worker caches. The public
     // homepage can remain cached, but management assets must always update.
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js?v=1.1.13-data2", { updateViaCache: "none" }).catch(() => {});
+      navigator.serviceWorker.register("/sw.js?v=1.1.13-data3", { updateViaCache: "none" }).catch(() => {});
     }
   </script>
-  <script src="/assets/common.js?v=1.1.13-data2" defer></script>
-  <script src="/assets/admin.js?v=1.1.13-data2" defer></script>
+  <script src="/assets/common.js?v=1.1.13-data3" defer></script>
+  <script src="/assets/admin.js?v=1.1.13-data3" defer></script>
 </body>
 </html>
