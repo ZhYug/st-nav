@@ -1,4 +1,4 @@
-# ST Nav v1.1.8
+# ST Nav v1.1.11
 
 轻量级个人导航 + 短链接服务，运行在 **Cloudflare Pages Advanced Mode + D1**。
 

@@ -1,5 +1,5 @@
 
-const VERSION = "1.1.8";
+const VERSION = "1.1.11";
 const SESSION_COOKIE = "__Host-stnav_session";
 const SESSION_TTL = 86400;
 const PUBLIC_CACHE_CONTROL = "public, max-age=0, s-maxage=30, stale-while-revalidate=60";
@@ -486,7 +486,7 @@ async function handleApi(request, env, ctx, parts) {
   
   if (path === "/api/admin/links/bulk" && method === "POST") {
     const data = await body(request);
-    const allowedActions = new Set(["add_navigation", "enable", "disable", "delete"]);
+    const allowedActions = new Set(["add_navigation", "remove_navigation", "enable", "disable", "delete"]);
     const action = String(data.action || "");
     if (!allowedActions.has(action)) {
       return json({ error: "批量操作类型无效" }, 400);
@@ -510,6 +510,19 @@ async function handleApi(request, env, ctx, parts) {
       for (let i = 0; i < list.length; i += size) result.push(list.slice(i, i + size));
       return result;
     };
+
+    if (action === "remove_navigation") {
+      let affected = 0;
+      for (const chunk of chunks(ids, 90)) {
+        const marks = placeholders(chunk.length);
+        const result = await env.DB.prepare(
+          `DELETE FROM navigation WHERE link_id IN (${marks})`
+        ).bind(...chunk).run();
+        affected += Number(result.meta?.changes || 0);
+      }
+      invalidatePublicCache(request, ctx);
+      return json({ ok: true, affected, failed: Math.max(0, ids.length - affected) });
+    }
 
     if (action === "add_navigation") {
       // One INSERT...SELECT keeps the operation efficient for large selections and

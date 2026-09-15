@@ -234,11 +234,13 @@ async function bulkLinkAction(action) {
 
   const messages = {
     add_navigation: "批量加入导航",
+    remove_navigation: "批量从导航移除",
     enable: "批量启用",
     disable: "批量停用",
     delete: "批量删除",
   };
   if (action === "delete" && !confirm(`确定删除已选择的 ${ids.length} 个短链接吗？\n已关联的导航项目也会一起删除。`)) return;
+  if (action === "remove_navigation" && !confirm(`确定将已选择的 ${ids.length} 个短链接从导航中移除吗？\n不会删除短链接本身。`)) return;
 
   const button = document.querySelector(`[data-bulk-action="${action}"]`);
   if (button) button.disabled = true;
@@ -298,10 +300,12 @@ $("#selectPageLinks").onclick = () => selectVisibleLinks(false);
 $("#selectAllLinks").onclick = () => selectVisibleLinks(true);
 $("#clearSelectedLinks").onclick = clearSelectedLinks;
 $("#bulkAddNav").dataset.bulkAction = "add_navigation";
+$("#bulkRemoveNav").dataset.bulkAction = "remove_navigation";
 $("#bulkEnableLinks").dataset.bulkAction = "enable";
 $("#bulkDisableLinks").dataset.bulkAction = "disable";
 $("#bulkDeleteLinks").dataset.bulkAction = "delete";
 $("#bulkAddNav").onclick = () => bulkLinkAction("add_navigation");
+$("#bulkRemoveNav").onclick = () => bulkLinkAction("remove_navigation");
 $("#bulkEnableLinks").onclick = () => bulkLinkAction("enable");
 $("#bulkDisableLinks").onclick = () => bulkLinkAction("disable");
 $("#bulkDeleteLinks").onclick = () => bulkLinkAction("delete");
@@ -350,20 +354,19 @@ function linkModal(item = null) {
 
 async function addLinkToNavigation(item) {
   const exists = linkedNav(item);
-  if (exists) {
-    toast("这个短链接已经在导航里了");
-    switchSection("navigation");
-    return;
-  }
   try {
-    await api("/api/admin/navigation", {
-      method: "POST",
-      body: JSON.stringify({ link_id: item.id, enabled: item.enabled !== false }),
-    });
-    toast("已添加到导航");
+    if (exists) {
+      await api(`/api/admin/navigation/${exists.id}`, { method: "DELETE" });
+      toast("已从导航移除");
+    } else {
+      await api("/api/admin/navigation", {
+        method: "POST",
+        body: JSON.stringify({ link_id: item.id, enabled: item.enabled !== false }),
+      });
+      toast("已添加到导航");
+    }
     await loadAll();
   } catch (error) {
-    if (error.message.includes("已经在导航")) switchSection("navigation");
     toast(error.message);
   }
 }
