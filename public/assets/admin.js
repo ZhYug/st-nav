@@ -606,6 +606,30 @@ async function deleteNav(item) {
   catch (error) { toast(error.message); }
 }
 
+function initSettingsTabs() {
+  const tabs = [...document.querySelectorAll("[data-settings-tab]")];
+  const panels = [...document.querySelectorAll("[data-settings-panel]")];
+  if (!tabs.length) return;
+  const activate = (name) => {
+    tabs.forEach((tab) => {
+      const active = tab.dataset.settingsTab === name;
+      tab.classList.toggle("active", active);
+      tab.setAttribute("aria-selected", String(active));
+    });
+    panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.settingsPanel !== name));
+  };
+  tabs.forEach((tab) => tab.addEventListener("click", () => activate(tab.dataset.settingsTab)));
+  document.querySelectorAll(".settings-panel-toggle").forEach((toggle) => {
+    toggle.addEventListener("click", () => {
+      const panel = toggle.closest(".settings-tab-panel");
+      if (!panel) return;
+      const expanded = toggle.getAttribute("aria-expanded") !== "false";
+      toggle.setAttribute("aria-expanded", String(!expanded));
+      panel.classList.toggle("collapsed", expanded);
+    });
+  });
+}
+
 function fillSettings() {
   const form = $("#settingsForm");
   ["site_title", "site_subtitle", "site_description", "hero_title", "hero_description", "accent", "nav_tag_style", "nav_columns_mobile", "nav_columns_tablet", "nav_columns_desktop", "nav_columns_wide", "nav_category_order", "nav_hidden_categories"].forEach((key) => {
@@ -862,4 +886,5 @@ function toggleAdminTheme() {
 if (localStorage.getItem("sln_admin_theme") === "light") document.documentElement.classList.add("light-admin");
 $("#adminThemeBtn").textContent = document.documentElement.classList.contains("light-admin") ? "☀" : "☾";
 $("#adminThemeBtn").onclick = toggleAdminTheme;
+initSettingsTabs();
 boot();
