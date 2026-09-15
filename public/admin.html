@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b0d12"><title>管理后台</title>
-  <link rel="icon" href="/assets/favicon.svg"><link rel="stylesheet" href="/assets/styles.css?v=1.1.13-data3">
+  <link rel="icon" href="/assets/favicon.svg"><link rel="stylesheet" href="/assets/styles.css?v=1.1.13-data4">
 </head>
 <body class="admin-page">
   <div id="loginView" class="login-view">
@@ -36,7 +36,7 @@
       </section>
       <section id="section-links" class="admin-section hidden">
         <div class="section-bar"><div><h2>短链接管理</h2><p>创建、管理和分析你的短链接。</p></div><div class="bar-actions"><button class="btn secondary" id="exportLinks">导出 CSV</button><button class="btn primary" id="addLinkBtn">+ 新建短链接</button></div></div>
-        <div class="panel table-panel"><div class="table-tools"><input id="linkSearch" placeholder="搜索短链接…"><button class="btn secondary csv-import-btn" id="importLinksBtn" type="button">批量导入 CSV</button><input id="csvFile" class="csv-file-input" type="file" aria-label="选择 CSV 文件"></div><div class="link-bulk-toolbar" id="linkBulkToolbar"><div class="link-bulk-selects"><button class="text-btn" id="selectPageLinks" type="button">全选本页</button><button class="text-btn" id="selectAllLinks" type="button">全选全部</button><button class="text-btn" id="clearSelectedLinks" type="button">取消选择</button><span id="linkSelectedCount" class="bulk-count">已选 0 项</span></div><div class="link-bulk-actions"><button class="btn secondary" id="bulkAddNav" type="button">批量加入导航</button><button class="btn secondary" id="bulkRemoveNav" type="button">批量从导航移除</button><button class="btn secondary" id="bulkEnableLinks" type="button">批量启用</button><button class="btn secondary" id="bulkDisableLinks" type="button">批量停用</button><button class="btn secondary danger-btn" id="bulkDeleteLinks" type="button">批量删除</button></div></div><div class="mobile-link-table-head" aria-hidden="true"><span></span><span>短码</span><span>目标</span><span>分类</span><span>点击</span><span>状态</span></div><div class="table-scroll"><table><thead><tr><th class="link-select-col"><span class="sr-only">选择</span></th><th>短码</th><th>目标</th><th>分类</th><th>点击</th><th>状态</th><th></th></tr></thead><tbody id="linksTable"></tbody></table></div><div id="linksPagination" class="pagination"></div></div>
+        <div class="panel table-panel"><div class="table-tools"><input id="linkSearch" placeholder="搜索短链接…"><button class="btn secondary csv-import-btn" id="importLinksBtn" type="button">批量导入 CSV</button><input id="csvFile" class="csv-file-input" type="file" aria-label="选择 CSV 文件"></div><div class="link-bulk-toolbar" id="linkBulkToolbar"><div class="link-bulk-selects"><button class="text-btn" id="selectPageLinks" type="button">全选本页</button><button class="text-btn" id="selectAllLinks" type="button">全选全部</button><button class="text-btn" id="clearSelectedLinks" type="button">取消选择</button><span id="linkSelectedCount" class="bulk-count">已选 0 项</span></div><div class="link-bulk-actions"><button class="btn secondary" id="bulkAddNav" type="button">加入导航</button><button class="btn secondary" id="bulkRemoveNav" type="button">移出导航</button><button class="btn secondary" id="bulkEnableLinks" type="button">启用</button><button class="btn secondary" id="bulkDisableLinks" type="button">停用</button><button class="btn secondary danger-btn" id="bulkDeleteLinks" type="button">删除</button></div></div><div class="table-scroll"><table><thead><tr><th class="link-select-col"><span class="sr-only">选择</span></th><th>短码</th><th>目标</th><th>分类</th><th>点击</th><th>状态</th><th></th></tr></thead><tbody id="linksTable"></tbody></table></div><div id="linksPagination" class="pagination"></div></div>
       </section>
       <section id="section-navigation" class="admin-section hidden">
         <div class="section-bar"><div><h2>导航管理</h2><p>拖拽调整顺序；关联短链接会自动同步。<span id="navCount" class="section-count">0 项</span></p></div><div class="bar-actions"><button class="btn secondary" id="saveNavOrder">保存排序</button><button class="btn primary" id="addNavBtn">+ 添加导航</button></div></div>
@@ -137,10 +137,10 @@
     // Keep the admin page out of stale service-worker caches. The public
     // homepage can remain cached, but management assets must always update.
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js?v=1.1.13-data3", { updateViaCache: "none" }).catch(() => {});
+      navigator.serviceWorker.register("/sw.js?v=1.1.13-data4", { updateViaCache: "none" }).catch(() => {});
     }
   </script>
-  <script src="/assets/common.js?v=1.1.13-data3" defer></script>
-  <script src="/assets/admin.js?v=1.1.13-data3" defer></script>
+  <script src="/assets/common.js?v=1.1.13-data4" defer></script>
+  <script src="/assets/admin.js?v=1.1.13-data4" defer></script>
 </body>
 </html>
