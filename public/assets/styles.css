@@ -913,8 +913,6 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
   .public-page .public-pagination .pagination-summary{font-size:11px}
   .public-page .public-pagination .pagination-actions{width:100%;justify-content:flex-start}
   .public-page .public-pagination .page-btn{height:34px;min-width:34px;padding:0 8px}
-  .public-page .public-pagination .page-number[data-page="1"]{display:none}
-  .public-page .public-pagination .page-ellipsis{display:none}
   .public-page .public-pagination .page-size-label{margin-right:auto}
   .public-page .nav-category-section{margin-bottom:22px}
   .public-page .nav-category-heading{font-size:15px;margin-bottom:9px}

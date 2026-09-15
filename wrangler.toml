@@ -12,4 +12,4 @@ migrations_dir = "./migrations"
 enabled = true
 
 [vars]
-ST_NAV_VERSION = "1.1.8"
+ST_NAV_VERSION = "1.1.10"
