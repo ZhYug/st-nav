@@ -69,6 +69,7 @@ function switchSection(section) {
     links: ["SHORT LINKS", "短链接管理"],
     navigation: ["NAVIGATION", "导航管理"],
     settings: ["SETTINGS", "系统设置"],
+    data: ["DATA MANAGEMENT", "数据管理"],
   };
   $("#sectionEyebrow").textContent = map[section][0];
   $("#sectionTitle").textContent = map[section][1];
@@ -645,25 +646,35 @@ $("#exportLinks").onclick = () => {
 };
 
 const csvInput = $("#csvFile");
+const dataCsvInput = $("#dataCsvFile");
 const csvImportButton = $("#importLinksBtn");
+const dataCsvButton = $("#dataCsvBtn");
+const restoreJsonInput = $("#restoreJsonFile");
+const restoreJsonButton = $("#restoreJsonBtn");
+const backupJsonButton = $("#backupJsonBtn");
+const quickBackupButton = $("#quickBackupBtn");
 
-// File pickers are browser-owned UI. Keep the input as a real, top-level
-// file control and only open it from the user's click event. This avoids
-// label/opacity/hidden-input quirks in mobile WebViews.
-csvImportButton?.addEventListener("click", () => {
-  if (!csvInput) return;
-  csvInput.value = "";
-  csvInput.click();
-});
+function downloadBlob(blob, filename) {
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
+
+function downloadJson(data, filename) {
+  downloadBlob(new Blob(["\ufeff", JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" }), filename);
+}
 
 function parseCsv(text) {
   const rows = [];
   let row = [], cell = "", quoted = false;
   const source = String(text || "").replace(/^\uFEFF/, "");
-
   for (let i = 0; i < source.length; i++) {
-    const ch = source[i];
-    const next = source[i + 1];
+    const ch = source[i], next = source[i + 1];
     if (ch === '"') {
       if (quoted && next === '"') { cell += '"'; i++; }
       else quoted = !quoted;
@@ -674,9 +685,7 @@ function parseCsv(text) {
       row.push(cell); cell = "";
       if (row.some((value) => value.trim() !== "")) rows.push(row);
       row = [];
-    } else {
-      cell += ch;
-    }
+    } else cell += ch;
   }
   if (quoted) throw new Error("CSV 引号不匹配");
   if (cell !== "" || row.length) {
@@ -686,50 +695,158 @@ function parseCsv(text) {
   return rows;
 }
 
-csvInput?.addEventListener("change", async (event) => {
-  const input = event.currentTarget;
-  const file = input.files?.[0];
-  if (!file) return;
-
-  try {
-    if (!/\.csv$/i.test(file.name || "")) {
-      throw new Error("请选择扩展名为 .csv 的文件");
+function normalizeCsvRows(rows) {
+  if (rows.length < 2) throw new Error("CSV 没有可导入的数据");
+  const headers = rows[0].map((value) => value.trim().toLowerCase());
+  const required = ["code", "url"];
+  const missing = required.filter((key) => !headers.includes(key));
+  if (missing.length) throw new Error(`CSV 缺少必需列：${missing.join(", ")}`);
+  const seen = new Map();
+  return rows.slice(1).map((values, index) => {
+    const data = {};
+    headers.forEach((key, col) => { data[key] = String(values[col] ?? "").trim(); });
+    data.enabled = !["false", "0", "no", "否", "停用"].includes(String(data.enabled).toLowerCase());
+    const code = data.code;
+    const duplicateInFile = code && seen.has(code);
+    if (code) seen.set(code, index + 2);
+    let error = "";
+    if (!code) error = "缺少短码";
+    else if (!/^[A-Za-z0-9_-]{2,64}$/.test(code)) error = "短码格式无效";
+    if (!data.url) error = error || "缺少 URL";
+    else {
+      try { const u = new URL(data.url); if (!["http:", "https:"].includes(u.protocol)) error = error || "URL 必须是 http/https"; }
+      catch { error = error || "URL 格式无效"; }
     }
-    if (file.size === 0) throw new Error("CSV 文件为空");
-    if (file.size > 10 * 1024 * 1024) throw new Error("CSV 文件不能超过 10 MB");
+    if (duplicateInFile) error = error || `与第 ${seen.get(code)} 行重复`;
+    const existing = A.links.find((item) => item.code === code);
+    return { row: index + 2, ...data, existingId: existing ? Number(existing.id) : null, conflict: Boolean(existing), error };
+  });
+}
 
-    const rows = parseCsv(await file.text());
-    if (rows.length < 2) throw new Error("CSV 没有可导入的数据");
+function openCsvPicker(input) {
+  if (!input) return;
+  input.value = "";
+  input.click();
+}
+csvImportButton?.addEventListener("click", () => openCsvPicker(csvInput));
+dataCsvButton?.addEventListener("click", () => openCsvPicker(dataCsvInput));
 
-    const headers = rows[0].map((value) => value.trim().toLowerCase());
-    const required = ["code", "url"];
-    const missing = required.filter((key) => !headers.includes(key));
-    if (missing.length) throw new Error(`CSV 缺少必需列：${missing.join(", ")}`);
-
-    let success = 0;
-    let failed = 0;
-    for (const values of rows.slice(1)) {
-      const data = {};
-      headers.forEach((key, index) => { data[key] = String(values[index] ?? "").trim(); });
-      if (!data.code || !data.url) { failed++; continue; }
-      data.enabled = data.enabled !== "false";
-      try {
-        await api("/api/admin/links", { method: "POST", body: JSON.stringify(data) });
-        success++;
-      } catch (error) {
-        failed++;
-        console.warn("CSV row import failed", data.code, error);
+function csvPreviewModal(items, filename) {
+  const valid = items.filter((item) => !item.error);
+  const conflicts = valid.filter((item) => item.conflict);
+  const invalid = items.filter((item) => item.error);
+  const statusText = `${items.length} 行，${valid.length} 条可导入，${conflicts.length} 条重复，${invalid.length} 条有问题`;
+  openModal("CSV 导入预览", `
+    <div class="import-summary"><strong>${esc(filename)}</strong><span>${statusText}</span></div>
+    <div class="import-options">
+      <label>重复短码处理<select id="csvConflictMode"><option value="skip">跳过重复</option><option value="update">覆盖已有</option><option value="rename">自动生成新短码</option></select></label>
+    </div>
+    <div class="import-preview-scroll"><table class="import-preview-table"><thead><tr><th>行</th><th>短码</th><th>目标</th><th>状态</th></tr></thead><tbody>
+      ${items.slice(0, 500).map((item) => `<tr><td>${item.row}</td><td><strong>${esc(item.code || "—")}</strong></td><td title="${esc(item.url || "")}">${esc(item.url || "—")}</td><td><span class="import-status ${item.error ? "bad" : item.conflict ? "warn" : "good"}">${esc(item.error || (item.conflict ? "重复" : "新增"))}</span></td></tr>`).join("")}
+    </tbody></table></div>
+    ${items.length > 500 ? '<div class="form-note">预览最多显示前 500 行，实际导入仍会处理全部行。</div>' : ''}
+    <div class="modal-actions"><button type="button" class="btn secondary" id="csvPreviewCancel">取消</button><button type="button" class="btn primary" id="csvPreviewImport">开始导入</button></div>
+  `);
+  $("#csvPreviewCancel").onclick = closeModal;
+  $("#csvPreviewImport").onclick = async () => {
+    const mode = $("#csvConflictMode").value;
+    const button = $("#csvPreviewImport");
+    button.disabled = true;
+    try {
+      const candidates = items.filter((item) => !item.error);
+      let success = 0, skipped = 0, failed = 0;
+      for (let i = 0; i < candidates.length; i += 25) {
+        const chunk = candidates.slice(i, i + 25);
+        const result = await api("/api/admin/links/import", {
+          method: "POST",
+          body: JSON.stringify({ mode, rows: chunk.map(({ row, existingId, conflict, error, ...data }) => ({ ...data, existing_id: existingId })) }),
+        });
+        success += Number(result.imported || 0);
+        skipped += Number(result.skipped || 0);
+        failed += Number(result.failed || 0);
       }
+      closeModal();
+      toast(`CSV 导入完成：成功 ${success} 条${skipped ? `，跳过 ${skipped} 条` : ""}${failed ? `，失败 ${failed} 条` : ""}`);
+      await loadAll();
+    } catch (error) {
+      toast(`CSV 导入失败：${error.message}`);
+      button.disabled = false;
     }
+  };
+}
 
-    toast(`导入完成：成功 ${success} 条${failed ? `，失败 ${failed} 条` : ""}`);
-    await loadAll();
-  } catch (error) {
-    console.error("CSV import failed", error);
-    toast(`CSV 导入失败：${error.message || "读取文件失败"}`);
-  } finally {
-    input.value = "";
-  }
+async function handleCsvFile(file) {
+  if (!file) return;
+  if (!/\.csv$/i.test(file.name || "")) throw new Error("请选择扩展名为 .csv 的文件");
+  if (file.size === 0) throw new Error("CSV 文件为空");
+  if (file.size > 10 * 1024 * 1024) throw new Error("CSV 文件不能超过 10 MB");
+  const items = normalizeCsvRows(parseCsv(await file.text()));
+  csvPreviewModal(items, file.name);
+}
+
+for (const input of [csvInput, dataCsvInput]) {
+  input?.addEventListener("change", async (event) => {
+    const file = event.currentTarget.files?.[0];
+    try { await handleCsvFile(file); }
+    catch (error) { toast(`CSV 预览失败：${error.message || "读取文件失败"}`); }
+    finally { event.currentTarget.value = ""; }
+  });
+}
+
+async function createJsonBackup() {
+  const data = await api("/api/admin/backup");
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  downloadJson(data, `st-nav-backup-${stamp}.json`);
+  toast(`JSON 备份完成：${Number(data.meta?.links || 0)} 个短链接，${Number(data.meta?.navigation || 0)} 个导航`);
+}
+backupJsonButton?.addEventListener("click", async () => {
+  try { backupJsonButton.disabled = true; await createJsonBackup(); }
+  catch (error) { toast(`备份失败：${error.message}`); }
+  finally { backupJsonButton.disabled = false; }
+});
+quickBackupButton?.addEventListener("click", async () => {
+  try { quickBackupButton.disabled = true; await createJsonBackup(); }
+  catch (error) { toast(`一键备份失败：${error.message}`); }
+  finally { quickBackupButton.disabled = false; }
+});
+
+restoreJsonButton?.addEventListener("click", () => openCsvPicker(restoreJsonInput));
+restoreJsonInput?.addEventListener("change", async (event) => {
+  const file = event.currentTarget.files?.[0];
+  try {
+    if (!file) return;
+    if (!/\.json$/i.test(file.name || "")) throw new Error("请选择 JSON 备份文件");
+    if (file.size === 0) throw new Error("JSON 文件为空");
+    if (file.size > 10 * 1024 * 1024) throw new Error("JSON 备份不能超过 10 MB");
+    const data = JSON.parse(await file.text().replace(/^\uFEFF/, ""));
+    const counts = data?.meta || {};
+    if (data?.format !== "st-nav-backup" || !Array.isArray(data.links) || !Array.isArray(data.navigation) || !Array.isArray(data.settings)) {
+      throw new Error("不是有效的 ST Nav JSON 备份文件");
+    }
+    openModal("JSON 恢复", `
+      <div class="restore-summary"><strong>${esc(file.name)}</strong><span>短链接 ${Number(counts.links || data.links.length)} · 导航 ${Number(counts.navigation || data.navigation.length)} · 设置 ${Number(counts.settings || data.settings.length)}</span></div>
+      <div class="import-options"><label>恢复方式<select id="jsonRestoreMode"><option value="merge">合并恢复（推荐）</option><option value="replace">完全覆盖恢复</option></select></label></div>
+      <div class="form-note">合并不会删除现有数据；完全覆盖会清空当前业务数据。覆盖恢复前请确认你已经保留当前备份。</div>
+      <div class="modal-actions"><button type="button" class="btn secondary" id="restoreCancel">取消</button><button type="button" class="btn primary" id="restoreStart">开始恢复</button></div>
+    `);
+    $("#restoreCancel").onclick = closeModal;
+    $("#restoreStart").onclick = async () => {
+      const mode = $("#jsonRestoreMode").value;
+      if (mode === "replace" && !confirm("完全覆盖恢复会删除当前短链接、导航、统计和设置，确定继续吗？")) return;
+      const button = $("#restoreStart");
+      button.disabled = true;
+      try {
+        const result = await api("/api/admin/restore", { method: "POST", body: JSON.stringify({ mode, backup: data }) });
+        closeModal();
+        toast(`JSON 恢复完成：新增/更新短链接 ${Number(result.links || 0)}，导航 ${Number(result.navigation || 0)}`);
+        await loadAll();
+      } catch (error) {
+        toast(`JSON 恢复失败：${error.message}`);
+        button.disabled = false;
+      }
+    };
+  } catch (error) { toast(`JSON 读取失败：${error.message || "文件无效"}`); }
+  finally { event.currentTarget.value = ""; }
 });
 
 function toggleAdminTheme() {
