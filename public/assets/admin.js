@@ -722,20 +722,6 @@ function normalizeCsvRows(rows) {
   });
 }
 
-function openFilePicker(input) {
-  if (!input) return;
-  input.value = "";
-  try {
-    if (typeof input.showPicker === "function") {
-      input.showPicker();
-      return;
-    }
-  } catch {}
-  // Fallback for browsers/WebViews without showPicker(). This call is kept
-  // synchronous so it remains inside the original user gesture.
-  input.click();
-}
-
 async function readFileText(file) {
   if (!file) throw new Error("未选择文件");
   if (typeof file.text === "function") return file.text();
@@ -754,8 +740,6 @@ async function readFileText(file) {
   throw new Error("当前浏览器不支持读取文件");
 }
 
-csvImportButton?.addEventListener("click", () => openFilePicker(csvInput));
-dataCsvButton?.addEventListener("click", () => openFilePicker(dataCsvInput));
 
 function csvPreviewModal(items, filename) {
   const valid = items.filter((item) => !item.error);
@@ -836,7 +820,6 @@ quickBackupButton?.addEventListener("click", async () => {
   finally { quickBackupButton.disabled = false; }
 });
 
-restoreJsonButton?.addEventListener("click", () => openFilePicker(restoreJsonInput));
 restoreJsonInput?.addEventListener("change", async (event) => {
   const file = event.currentTarget.files?.[0];
   try {
