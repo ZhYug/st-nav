@@ -1490,3 +1490,38 @@ html[data-theme="light"]{--bg:#f4f6fb;--bg2:#eef1f7;--surface:rgba(255,255,255,.
   .admin-page #section-links table tr.link-dense-row .click-count{font-size:9px;}
   .admin-page #section-links table tr.link-dense-row .status{font-size:8px;padding:3px 4px;}
 }
+
+
+/* v1.1.13-data5: responsive fixes for admin cards and navigation action controls. */
+.data-grid{min-width:0;}
+.nav-admin-actions{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:stretch;gap:4px;min-width:0;}
+.nav-admin-actions .small-btn{width:100%;min-width:0;padding:4px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.nav-admin-actions .nav-move-btn{width:100%;min-width:0;}
+
+@media (max-width:900px){
+  .data-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+
+@media (max-width:600px){
+  .data-grid{grid-template-columns:1fr;gap:10px;margin-bottom:12px;}
+  .data-card{width:100%;min-width:0;}
+  .data-card .panel-head{min-width:0;}
+  .data-card-body{padding:13px 14px 15px;min-width:0;}
+  .data-note{overflow-wrap:anywhere;word-break:break-word;}
+  .data-actions{width:100%;}
+  .data-actions .btn{min-width:0;max-width:100%;}
+
+  .admin-page .admin-nav-actions{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;width:100%;min-width:0;}
+  .admin-page .nav-admin-actions .small-btn,
+  .admin-page .nav-admin-actions .nav-move-btn{
+    width:100% !important;min-width:0 !important;max-width:none;height:29px;min-height:29px;
+    padding:2px 1px !important;font-size:8px !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    flex:initial !important;
+  }
+}
+
+@media (max-width:380px){
+  .admin-page .nav-admin-actions{gap:2px;}
+  .admin-page .nav-admin-actions .small-btn,
+  .admin-page .nav-admin-actions .nav-move-btn{height:27px;min-height:27px;font-size:7.5px !important;}
+}
