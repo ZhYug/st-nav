@@ -1,4 +1,5 @@
 const state = {
+  searchEngine: "local",
   items: [],
   settings: {},
   category: "全部",
@@ -122,7 +123,7 @@ function renderCats() {
 }
 
 function filtered() {
-  const query = $("#searchInput").value.trim().toLowerCase();
+  const query = state.searchEngine === "local" ? $("#searchInput").value.trim().toLowerCase() : "";
   return state.items.filter((item) =>
     (state.category === "全部" || item.category === state.category) &&
     (!state.favoritesOnly || state.favorites.includes(item.id)) &&
@@ -277,7 +278,72 @@ function renderRecent() {
     : '<span style="color:var(--faint);font-size:13px">还没有访问记录</span>';
 }
 
-$("#searchInput").oninput = () => { state.page = 1; scheduleRender(); };
+const SEARCH_ENGINES = {
+  local: { label: "卡片搜索", placeholder: "搜索导航、描述或分类…" },
+  google: { label: "Google", placeholder: "输入关键词搜索 Google…", url: (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}` },
+  baidu: { label: "百度", placeholder: "输入关键词搜索百度…", url: (q) => `https://www.baidu.com/s?wd=${encodeURIComponent(q)}` },
+  bing: { label: "Bing", placeholder: "输入关键词搜索 Bing…", url: (q) => `https://www.bing.com/search?q=${encodeURIComponent(q)}` },
+  github: { label: "GitHub", placeholder: "输入关键词搜索 GitHub…", url: (q) => `https://github.com/search?q=${encodeURIComponent(q)}&type=repositories` },
+};
+
+function setSearchEngine(engine) {
+  if (!SEARCH_ENGINES[engine]) engine = "local";
+  state.searchEngine = engine;
+  const config = SEARCH_ENGINES[engine];
+  document.querySelectorAll("[data-search-engine]").forEach((button) => {
+    const active = button.dataset.searchEngine === engine;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  const input = $("#searchInput");
+  input.placeholder = config.placeholder;
+  $("#searchSubmit").textContent = engine === "local" ? "搜索" : `搜索${config.label}`;
+  if (engine !== "local") {
+    state.page = 1;
+    render();
+  }
+}
+
+function submitSearch() {
+  const input = $("#searchInput");
+  const query = input.value.trim();
+  if (!query) {
+    input.focus();
+    if (state.searchEngine === "local") {
+      state.page = 1;
+      render();
+    }
+    return;
+  }
+  if (state.searchEngine === "local") {
+    state.page = 1;
+    render();
+    $("#navGrid")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  const engine = SEARCH_ENGINES[state.searchEngine];
+  if (engine?.url) window.location.assign(engine.url(query));
+}
+
+document.querySelectorAll("[data-search-engine]").forEach((button) => {
+  button.onclick = () => {
+    setSearchEngine(button.dataset.searchEngine);
+    $("#searchInput").focus({ preventScroll: true });
+  };
+});
+
+$("#searchInput").oninput = () => {
+  if (state.searchEngine !== "local") return;
+  state.page = 1;
+  scheduleRender();
+};
+$("#searchInput").onkeydown = (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    submitSearch();
+  }
+};
+$("#searchSubmit").onclick = submitSearch;
 $("#favoritesOnly").onclick = () => {
   state.favoritesOnly = !state.favoritesOnly;
   state.page = 1;
@@ -287,6 +353,7 @@ $("#favoritesOnly").onclick = () => {
 
 $("#clearFilters").onclick = () => {
   $("#searchInput").value = "";
+  setSearchEngine("local");
   state.category = "全部";
   state.favoritesOnly = false;
   state.page = 1;
@@ -320,6 +387,7 @@ function initMobileAppUI() {
       state.favoritesOnly = false;
       state.page = 1;
       $("#searchInput").value = "";
+      setSearchEngine("local");
       $("#favoritesOnly").textContent = "☆ 收藏";
       renderCats();
       render();

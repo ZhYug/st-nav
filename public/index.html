@@ -11,8 +11,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="preload" href="/assets/styles.css?v=1.1.12" as="style">
-  <link rel="stylesheet" href="/assets/styles.css?v=1.1.12">
+  <link rel="preload" href="/assets/styles.css?v=1.1.12-search1" as="style">
+  <link rel="stylesheet" href="/assets/styles.css?v=1.1.12-search1">
 </head>
 <body class="public-page">
   <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
@@ -32,9 +32,20 @@
       <div class="eyebrow">PERSONAL DASHBOARD</div>
       <h1 id="heroTitle">Everything you need, one click away.</h1>
       <p id="heroDesc">A fast, elegant home for your frequently used websites.</p>
-      <div class="search-wrap">
-        <span>⌕</span><input id="searchInput" autocomplete="off" placeholder="搜索导航、描述或分类…">
-        <kbd>⌘ K</kbd>
+      <div class="search-panel" role="search" aria-label="站内与外部搜索">
+        <div class="search-engines" role="tablist" aria-label="搜索方式">
+          <button class="search-engine active" type="button" data-search-engine="local" role="tab" aria-selected="true">卡片搜索</button>
+          <button class="search-engine" type="button" data-search-engine="google" role="tab" aria-selected="false">Google</button>
+          <button class="search-engine" type="button" data-search-engine="baidu" role="tab" aria-selected="false">百度</button>
+          <button class="search-engine" type="button" data-search-engine="bing" role="tab" aria-selected="false">Bing</button>
+          <button class="search-engine" type="button" data-search-engine="github" role="tab" aria-selected="false">GitHub</button>
+        </div>
+        <div class="search-wrap">
+          <span aria-hidden="true">⌕</span>
+          <input id="searchInput" autocomplete="off" enterkeyhint="search" placeholder="搜索导航、描述或分类…" aria-label="搜索关键词">
+          <kbd>⌘ K</kbd>
+          <button class="search-submit" id="searchSubmit" type="button" aria-label="搜索">搜索</button>
+        </div>
       </div>
     </section>
 
@@ -70,7 +81,7 @@
     <span>⌘K 快速搜索</span>
   </footer>
 
-  <script src="/assets/common.js?v=1.1.12" defer></script>
-  <script src="/assets/app.js?v=1.1.12" defer></script>
+  <script src="/assets/common.js?v=1.1.12-search1" defer></script>
+  <script src="/assets/app.js?v=1.1.12-search1" defer></script>
 </body>
 </html>
