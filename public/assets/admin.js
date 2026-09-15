@@ -796,10 +796,19 @@ async function handleCsvFile(file) {
 
 for (const input of [csvInput, dataCsvInput]) {
   input?.addEventListener("change", async (event) => {
-    const file = event.currentTarget.files?.[0];
-    try { await handleCsvFile(file); }
-    catch (error) { toast(`CSV 预览失败：${error.message || "读取文件失败"}`); }
-    finally { event.currentTarget.value = ""; }
+    // Copy the File reference before doing any async work. Some Android
+    // document providers recycle the FileList after the picker closes.
+    const file = event.target?.files && event.target.files.length ? event.target.files[0] : null;
+    try {
+      if (!file) return;
+      await handleCsvFile(file);
+    } catch (error) {
+      toast(`CSV 预览失败：${error.message || "读取文件失败"}`);
+    } finally {
+      // Reset only after the file has been completely read so the same file
+      // can be selected again on Android without losing the File object.
+      try { event.target.value = ""; } catch {}
+    }
   });
 }
 

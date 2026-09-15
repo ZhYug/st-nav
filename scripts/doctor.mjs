@@ -6,7 +6,7 @@ const fail = (message) => {
   process.exitCode = 1;
 };
 
-console.log('🔎 ST Nav v1.1.15 Pages Advanced Mode 检查\n');
+console.log('🔎 ST Nav v1.1.16 Pages Advanced Mode 检查\n');
 
 const requiredFiles = [
   'wrangler.toml',
@@ -34,13 +34,13 @@ if (existsSync('wrangler.toml')) {
   if (/^\s*\[assets\]/m.test(config)) fail('Pages 配置不应使用 [assets] Workers Static Assets 配置');
   if (!/binding\s*=\s*["']DB["']/.test(config) || !/database_name\s*=/.test(config)) fail('缺少 D1 DB binding');
   if (!/migrations_dir\s*=\s*["']\.\/migrations["']/.test(config)) fail('缺少 migrations_dir 配置');
-  if (!/ST_NAV_VERSION\s*=\s*["']1\.1\.15["']/.test(config)) fail('wrangler.toml 版本号不是 1.1.15');
+  if (!/ST_NAV_VERSION\s*=\s*["']1\.1\.16["']/.test(config)) fail('wrangler.toml 版本号不是 1.1.16');
   console.log('✓ Pages + D1 配置正确');
 }
 
 if (existsSync('package.json')) {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-  if (pkg.version !== '1.1.15') fail('package.json 版本号不是 1.1.15');
+  if (pkg.version !== '1.1.16') fail('package.json 版本号不是 1.1.16');
   if (pkg.scripts?.dev !== 'wrangler pages dev public') fail('本地 dev 脚本未使用 Pages 模式');
   if (pkg.scripts?.deploy !== 'wrangler pages deploy public') fail('deploy 脚本未使用 Pages 部署');
   if (pkg.scripts?.build) fail('不应存在多余的 build 脚本');
@@ -55,7 +55,7 @@ if (existsSync('public/.assetsignore')) {
 
 if (existsSync('public/_worker.js')) {
   const worker = readFileSync('public/_worker.js', 'utf8');
-  if (!worker.includes('const VERSION = "1.1.15"')) fail('Worker 版本号不是 1.1.15');
+  if (!worker.includes('const VERSION = "1.1.16"')) fail('Worker 版本号不是 1.1.16');
   if (!worker.includes('export default')) fail('Worker 未使用 Module Worker 语法');
   if (!worker.includes('env.ASSETS.fetch')) fail('Worker 未处理 Pages 静态资产请求');
   if (!worker.includes('__Host-stnav_session')) fail('Session Cookie 未启用 __Host- 前缀');
@@ -72,5 +72,5 @@ if (existsSync('public/_worker.js')) {
 
 if (process.exitCode) process.exit(process.exitCode);
 
-console.log('\n✓ v1.1.15 项目结构检查完成');
+console.log('\n✓ v1.1.16 项目结构检查完成');
 console.log('ℹ️ 生产环境的 DB / ADMIN_PASSWORD / SESSION_SECRET 请在 Cloudflare Pages Dashboard 中绑定。');

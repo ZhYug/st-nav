@@ -266,3 +266,7 @@ _worker.js
 - 不要提交 `.dev.vars`。
 - 正式环境建议使用 Cloudflare WAF / Rate Limiting 进一步保护登录接口。
 - Preview 环境最好使用独立 D1，避免测试数据进入生产库。
+
+
+## v1.1.16 CSV file picker fix
+CSV inputs intentionally do not set an `accept` MIME filter. Android document providers can report CSV files as generic/Excel MIME types and disable selection when a strict `text/csv` filter is used. The UI validates the `.csv` extension after selection. File references are copied before async reads and the input is reset only after reading completes.
