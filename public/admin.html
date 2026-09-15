@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b0d12"><title>管理后台</title>
-  <link rel="icon" href="/assets/favicon.svg"><link rel="stylesheet" href="/assets/styles.css?v=1.1.16-csv-picker">
+  <link rel="icon" href="/assets/favicon.svg"><link rel="stylesheet" href="/assets/styles.css?v=1.1.13-data1">
 </head>
 <body class="admin-page">
   <div id="loginView" class="login-view">
@@ -22,6 +22,7 @@
         <button class="side-item" data-section="links">↗ <span>短链接管理</span></button>
         <button class="side-item" data-section="navigation">▦ <span>导航管理</span></button>
         <button class="side-item" data-section="settings">⚙ <span>系统设置</span></button>
+        <button class="side-item" data-section="data">⇩ <span>数据管理</span></button>
       </nav>
       <div class="sidebar-bottom"><a href="/" target="_blank">打开前台 ↗</a><button id="logoutBtn">退出登录</button></div>
     </aside>
@@ -36,7 +37,7 @@
       </section>
       <section id="section-links" class="admin-section hidden">
         <div class="section-bar"><div><h2>短链接管理</h2><p>创建、管理和分析你的短链接。</p></div><div class="bar-actions"><button class="btn secondary" id="exportLinks">导出 CSV</button><button class="btn primary" id="addLinkBtn">+ 新建短链接</button></div></div>
-        <div class="panel table-panel"><div class="table-tools"><input id="linkSearch" placeholder="搜索短链接…"><label class="btn secondary csv-import-btn file-picker" id="importLinksBtn">批量导入 CSV<input id="csvFile" class="file-picker-input" type="file" aria-label="选择 CSV 文件"></label></div><div class="link-bulk-toolbar" id="linkBulkToolbar"><div class="link-bulk-selects"><button class="text-btn" id="selectPageLinks" type="button">全选本页</button><button class="text-btn" id="selectAllLinks" type="button">全选全部</button><button class="text-btn" id="clearSelectedLinks" type="button">取消选择</button><span id="linkSelectedCount" class="bulk-count">已选 0 项</span></div><div class="link-bulk-actions"><button class="btn secondary" id="bulkAddNav" type="button">批量加入导航</button><button class="btn secondary" id="bulkRemoveNav" type="button">批量从导航移除</button><button class="btn secondary" id="bulkEnableLinks" type="button">批量启用</button><button class="btn secondary" id="bulkDisableLinks" type="button">批量停用</button><button class="btn secondary danger-btn" id="bulkDeleteLinks" type="button">批量删除</button></div></div><div class="mobile-link-table-head" aria-hidden="true"><span></span><span>短码</span><span>目标</span><span>分类</span><span>点击</span><span>状态</span></div><div class="table-scroll"><table><thead><tr><th class="link-select-col"><span class="sr-only">选择</span></th><th>短码</th><th>目标</th><th>分类</th><th>点击</th><th>状态</th><th></th></tr></thead><tbody id="linksTable"></tbody></table></div><div id="linksPagination" class="pagination"></div></div>
+        <div class="panel table-panel"><div class="table-tools"><input id="linkSearch" placeholder="搜索短链接…"><button class="btn secondary csv-import-btn" id="importLinksBtn" type="button">批量导入 CSV</button><input id="csvFile" class="csv-file-input" type="file" aria-label="选择 CSV 文件"></div><div class="link-bulk-toolbar" id="linkBulkToolbar"><div class="link-bulk-selects"><button class="text-btn" id="selectPageLinks" type="button">全选本页</button><button class="text-btn" id="selectAllLinks" type="button">全选全部</button><button class="text-btn" id="clearSelectedLinks" type="button">取消选择</button><span id="linkSelectedCount" class="bulk-count">已选 0 项</span></div><div class="link-bulk-actions"><button class="btn secondary" id="bulkAddNav" type="button">批量加入导航</button><button class="btn secondary" id="bulkRemoveNav" type="button">批量从导航移除</button><button class="btn secondary" id="bulkEnableLinks" type="button">批量启用</button><button class="btn secondary" id="bulkDisableLinks" type="button">批量停用</button><button class="btn secondary danger-btn" id="bulkDeleteLinks" type="button">批量删除</button></div></div><div class="mobile-link-table-head" aria-hidden="true"><span></span><span>短码</span><span>目标</span><span>分类</span><span>点击</span><span>状态</span></div><div class="table-scroll"><table><thead><tr><th class="link-select-col"><span class="sr-only">选择</span></th><th>短码</th><th>目标</th><th>分类</th><th>点击</th><th>状态</th><th></th></tr></thead><tbody id="linksTable"></tbody></table></div><div id="linksPagination" class="pagination"></div></div>
       </section>
       <section id="section-navigation" class="admin-section hidden">
         <div class="section-bar"><div><h2>导航管理</h2><p>拖拽调整顺序；关联短链接会自动同步。<span id="navCount" class="section-count">0 项</span></p></div><div class="bar-actions"><button class="btn secondary" id="saveNavOrder">保存排序</button><button class="btn primary" id="addNavBtn">+ 添加导航</button></div></div>
@@ -55,6 +56,27 @@
         </div>
         <div id="navAdminGrid" class="admin-nav-grid"></div>
         <div id="navPagination" class="pagination"></div>
+      </section>
+      <section id="section-data" class="admin-section hidden">
+        <div class="section-bar"><div><h2>数据管理</h2><p>安全导入、导出和恢复导航数据。建议修改前先做一次 JSON 备份。</p></div><div class="bar-actions"><button class="btn primary" id="quickBackupBtn" type="button">一键备份</button></div></div>
+        <div class="data-grid">
+          <div class="panel data-card">
+            <div class="panel-head"><div><h3>CSV 导入</h3><small>先预览，再处理重复短码，不会直接写入数据库。</small></div></div>
+            <div class="data-card-body">
+              <p class="data-note">支持 <code>code,url,title,description,category,enabled</code>。重复短码可选择跳过、覆盖或自动生成新短码。</p>
+              <div class="data-actions"><button class="btn secondary" id="dataExportCsvBtn" type="button">导出 CSV 文件</button><button class="btn secondary" id="dataCsvBtn" type="button">导入 CSV 文件</button><input id="dataCsvFile" class="csv-file-input" type="file" aria-label="选择 CSV 文件"></div>
+            </div>
+          </div>
+          <div class="panel data-card">
+            <div class="panel-head"><div><h3>JSON 备份</h3><small>备份短链接、导航、设置及点击统计。</small></div></div>
+            <div class="data-card-body"><p class="data-note">备份文件可用于完整迁移或灾备。下载文件保存在你的设备上。</p><div class="data-actions"><button class="btn primary" id="backupJsonBtn" type="button">下载 JSON 备份</button></div></div>
+          </div>
+          <div class="panel data-card">
+            <div class="panel-head"><div><h3>JSON 恢复</h3><small>支持合并恢复或完全覆盖恢复。</small></div></div>
+            <div class="data-card-body"><p class="data-note">覆盖恢复会清空当前短链接、导航、统计和设置，再写入备份内容；操作前会再次确认。</p><div class="data-actions"><button class="btn secondary" id="restoreJsonBtn" type="button">选择 JSON 文件</button><input id="restoreJsonFile" class="csv-file-input" type="file" accept=".json,application/json" aria-label="选择 JSON 备份文件"></div></div>
+          </div>
+        </div>
+        <div class="panel data-help"><div class="panel-head"><div><h3>恢复策略说明</h3><small>建议日常使用“合并恢复”，换站或灾难恢复使用“完全覆盖”。</small></div></div><div class="data-help-body"><div><strong>合并恢复</strong><p>短链接按短码更新或新增；导航尽量按关联短链接恢复；设置覆盖同名项；不会删除当前未出现在备份中的数据。</p></div><div><strong>完全覆盖</strong><p>先清空现有业务数据，再恢复备份中的全部数据。适合将当前站点恢复到备份时的状态。</p></div></div></div>
       </section>
       <section id="section-settings" class="admin-section hidden">
         <div class="section-bar"><div><h2>系统设置</h2><p>统一管理前台标题、描述、视觉强调色和导航排版。</p></div></div>
@@ -82,27 +104,6 @@
           </div>
           <button class="btn primary">保存设置</button><div id="settingsMessage" class="form-success"></div>
         </form>
-        <div class="settings-data-area">
-        <div class="settings-subsection-head"><div><h3>数据管理</h3><p>安全导入、导出和恢复导航数据。建议修改前先做一次 JSON 备份。</p></div><button class="btn primary" id="quickBackupBtn" type="button">一键备份</button></div>
-        <div class="data-grid">
-          <div class="panel data-card">
-            <div class="panel-head"><div><h3>CSV 导入</h3><small>先预览，再处理重复短码，不会直接写入数据库。</small></div></div>
-            <div class="data-card-body">
-              <p class="data-note">支持 <code>code,url,title,description,category,enabled</code>。重复短码可选择跳过、覆盖或自动生成新短码。</p>
-              <div class="data-actions"><label class="btn secondary file-picker" id="dataCsvBtn">选择 CSV 文件<input id="dataCsvFile" class="file-picker-input" type="file" aria-label="选择 CSV 文件"></label></div>
-            </div>
-          </div>
-          <div class="panel data-card">
-            <div class="panel-head"><div><h3>JSON 备份</h3><small>备份短链接、导航、设置及点击统计。</small></div></div>
-            <div class="data-card-body"><p class="data-note">备份文件可用于完整迁移或灾备。下载文件保存在你的设备上。</p><div class="data-actions"><button class="btn primary" id="backupJsonBtn" type="button">下载 JSON 备份</button></div></div>
-          </div>
-          <div class="panel data-card">
-            <div class="panel-head"><div><h3>JSON 恢复</h3><small>支持合并恢复或完全覆盖恢复。</small></div></div>
-            <div class="data-card-body"><p class="data-note">覆盖恢复会清空当前短链接、导航、统计和设置，再写入备份内容；操作前会再次确认。</p><div class="data-actions"><label class="btn secondary file-picker" id="restoreJsonBtn">选择 JSON 文件<input id="restoreJsonFile" class="file-picker-input" type="file" accept=".json,application/json" aria-label="选择 JSON 备份文件"></label></div></div>
-          </div>
-        </div>
-        <div class="panel data-help"><div class="panel-head"><div><h3>恢复策略说明</h3><small>建议日常使用“合并恢复”，换站或灾难恢复使用“完全覆盖”。</small></div></div><div class="data-help-body"><div><strong>合并恢复</strong><p>短链接按短码更新或新增；导航尽量按关联短链接恢复；设置覆盖同名项；不会删除当前未出现在备份中的数据。</p></div><div><strong>完全覆盖</strong><p>先清空现有业务数据，再恢复备份中的全部数据。适合将当前站点恢复到备份时的状态。</p></div></div></div>
-        </div>
       </section>
     </main>
   </div>
@@ -112,10 +113,10 @@
     // Keep the admin page out of stale service-worker caches. The public
     // homepage can remain cached, but management assets must always update.
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js?v=1.1.16-csv-picker", { updateViaCache: "none" }).catch(() => {});
+      navigator.serviceWorker.register("/sw.js?v=1.1.13-data1", { updateViaCache: "none" }).catch(() => {});
     }
   </script>
-  <script src="/assets/common.js?v=1.1.16-csv-picker" defer></script>
-  <script src="/assets/admin.js?v=1.1.16-csv-picker" defer></script>
+  <script src="/assets/common.js?v=1.1.13-data1" defer></script>
+  <script src="/assets/admin.js?v=1.1.13-data1" defer></script>
 </body>
 </html>
