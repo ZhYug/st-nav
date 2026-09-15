@@ -671,7 +671,6 @@ dataExportCsvButton?.addEventListener("click", () => exportLinksCsv("shortlinks.
 const restoreJsonInput = $("#restoreJsonFile");
 const restoreJsonButton = $("#restoreJsonBtn");
 const backupJsonButton = $("#backupJsonBtn");
-const quickBackupButton = $("#quickBackupBtn");
 
 function downloadBlob(blob, filename) {
   const href = URL.createObjectURL(blob);
@@ -822,11 +821,6 @@ backupJsonButton?.addEventListener("click", async () => {
   try { backupJsonButton.disabled = true; await createJsonBackup(); }
   catch (error) { toast(`备份失败：${error.message}`); }
   finally { backupJsonButton.disabled = false; }
-});
-quickBackupButton?.addEventListener("click", async () => {
-  try { quickBackupButton.disabled = true; await createJsonBackup(); }
-  catch (error) { toast(`一键备份失败：${error.message}`); }
-  finally { quickBackupButton.disabled = false; }
 });
 
 restoreJsonButton?.addEventListener("click", () => openCsvPicker(restoreJsonInput));
