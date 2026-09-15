@@ -822,7 +822,7 @@ restoreJsonInput?.addEventListener("change", async (event) => {
     if (!/\.json$/i.test(file.name || "")) throw new Error("请选择 JSON 备份文件");
     if (file.size === 0) throw new Error("JSON 文件为空");
     if (file.size > 10 * 1024 * 1024) throw new Error("JSON 备份不能超过 10 MB");
-    const data = JSON.parse(await file.text().replace(/^\uFEFF/, ""));
+    const data = JSON.parse((await file.text()).replace(/^\uFEFF/, ""));
     const counts = data?.meta || {};
     if (data?.format !== "st-nav-backup" || !Array.isArray(data.links) || !Array.isArray(data.navigation) || !Array.isArray(data.settings)) {
       throw new Error("不是有效的 ST Nav JSON 备份文件");
