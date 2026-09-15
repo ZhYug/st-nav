@@ -112,33 +112,53 @@ function renderDashboard(data) {
 
 function drawChart(rows) {
   const canvas = $("#clickChart");
-  const rect = canvas.getBoundingClientRect();
-  const ratio = window.devicePixelRatio || 1;
-  const width = Math.max(300, Math.floor(rect.width));
-  const height = Math.max(220, Math.floor(rect.height));
-  canvas.width = width * ratio;
-  canvas.height = height * ratio;
+  const wrap = canvas?.parentElement;
+  if (!canvas || !wrap) return;
+
+  // Use the chart container's content box instead of the canvas' intrinsic
+  // 300x150 size. The old implementation could make the canvas taller than
+  // .chart-wrap, causing the line to visually escape the panel on desktop
+  // and mobile. Keep a small minimum only for the drawing math, never the DOM.
+  const width = Math.max(1, Math.floor(wrap.clientWidth));
+  const height = Math.max(1, Math.floor(wrap.clientHeight));
+  const ratio = Math.max(1, window.devicePixelRatio || 1);
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
   const ctx = canvas.getContext("2d");
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-  const W = width, H = height, padding = 22;
+  const W = width, H = height;
+  const padding = Math.min(22, Math.max(12, Math.floor(Math.min(W, H) * 0.08)));
+  const lineWidth = 3;
+  const left = padding + lineWidth / 2;
+  const right = Math.max(left, W - padding - lineWidth / 2);
+  const top = padding + lineWidth / 2;
+  const bottom = Math.max(top, H - padding - lineWidth / 2);
   const max = Math.max(1, ...rows.map((row) => Number(row.clicks) || 0));
   const styles = getComputedStyle(document.documentElement);
+
   ctx.clearRect(0, 0, W, H);
   ctx.strokeStyle = styles.getPropertyValue("--border2");
   ctx.lineWidth = 1;
   for (let i = 0; i < 4; i++) {
     const y = padding + (H - padding * 2) * i / 3;
-    ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(W - padding, y); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(padding, y);
+    ctx.lineTo(W - padding, y);
+    ctx.stroke();
   }
   if (!rows.length) return;
+
   ctx.strokeStyle = styles.getPropertyValue("--primary");
-  ctx.lineWidth = 3;
+  ctx.lineWidth = lineWidth;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
   ctx.beginPath();
   rows.forEach((row, index) => {
-    const x = padding + (W - padding * 2) * index / Math.max(1, rows.length - 1);
-    const y = H - padding - (H - padding * 2) * ((Number(row.clicks) || 0) / max);
+    const x = rows.length === 1
+      ? (left + right) / 2
+      : left + (right - left) * index / (rows.length - 1);
+    const value = Math.max(0, Number(row.clicks) || 0);
+    const y = bottom - (bottom - top) * (value / max);
     index ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
   });
   ctx.stroke();
